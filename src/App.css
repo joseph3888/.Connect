@@ -1,0 +1,181 @@
+/* App.css */
+.layout-container {
+  display: flex;
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Sidebar replaces Navbar */
+.sidebar {
+  width: 280px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+  background: linear-gradient(to right, rgba(255,255,255,0.4), transparent);
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.logo {
+  font-size: 2.2rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 3rem;
+  padding-left: 1rem;
+  letter-spacing: -1.5px;
+}
+
+.nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.nav-item {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 1.25rem;
+  padding: 1rem;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.nav-item:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+  transform: translateX(10px);
+}
+
+.nav-item.active {
+  color: var(--accent-color);
+  background-color: rgba(118, 123, 111, 0.15);
+  box-shadow: inset 2px 0 0 0 var(--accent-color);
+  font-weight: 800;
+}
+
+.user-profile-widget {
+  margin-top: auto;
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-radius: 16px;
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.user-profile-widget:hover {
+  border-color: var(--border-highlight);
+  background-color: var(--surface-hover);
+}
+
+.user-profile-widget .avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-secondary), var(--accent-tertiary));
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-handle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.logout-icon {
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.logout-icon:hover {
+  color: var(--accent-color);
+  transform: scale(1.1);
+}
+
+.content {
+  flex: 1;
+  padding: 2rem 2rem 2rem 4rem;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .layout-container {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: fixed;
+    bottom: 0;
+    top: auto;
+    flex-direction: row;
+    padding: 0.75rem 1rem;
+    border-right: none;
+    border-top: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    align-items: center;
+    justify-content: space-around;
+  }
+  
+  .logo, .user-profile-widget, .post-btn-text, .nav-label {
+    display: none;
+  }
+  
+  .nav-links {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+  }
+
+  .nav-item {
+    padding: 0.75rem;
+    font-size: 1.75rem;
+    border-radius: 16px;
+  }
+  
+  .nav-item:hover {
+    transform: none;
+  }
+
+  /* Reveal a "+" icon inside the post button on mobile since text is hidden */
+  .mobile-only {
+    display: block !important;
+  }
+  
+  .content {
+    padding: 1.5rem;
+    padding-bottom: 6rem; /* space for bottom nav */
+  }
+}

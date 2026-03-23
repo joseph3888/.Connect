@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-color: #f1f2f4;
+  --surface-color: rgba(255, 255, 255, 0.65);
+  --surface-hover: rgba(255, 255, 255, 0.85);
+  --text-primary: #2b302c;
+  --text-secondary: #5a615a;
+  --accent-color: #767b6f;
+  --accent-hover: #63685c;
+  --accent-secondary: #babbac;
+  --accent-tertiary: #d3d4d6;
+  --border-color: rgba(118, 123, 111, 0.1);
+  --border-highlight: rgba(118, 123, 111, 0.3);
+  --shadow-sm: 0 4px 10px rgba(118, 123, 111, 0.05);
+  --shadow-lg: 0 20px 40px -10px rgba(118, 123, 111, 0.15), inset 0 1px 0 rgba(255, 255, 255, 1), inset 0 -1px 0 rgba(118, 123, 111, 0.05);
+  --shadow-glow: 0 0 30px rgba(118, 123, 111, 0.25);
+  --blur: blur(30px) saturate(150%);
+  
+  --font-base: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-base);
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  line-height: 1.6;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+  letter-spacing: -0.01em;
+}
+
+/* Base interactive */
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); /* bouncy UI transition */
+}
+
+/* Aurora Backdrop Masterclass */
+.aurora-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  overflow: hidden;
+  background: var(--bg-color);
+}
+
+.aurora-bg::before,
+.aurora-bg::after,
+.aurora-blob {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(140px) saturate(120%);
+  opacity: 0.85;
+  mix-blend-mode: normal;
+  animation: float 25s infinite ease-in-out alternate;
+}
+
+.aurora-bg::before {
+  width: 60vw;
+  height: 60vh;
+  background: radial-gradient(circle, var(--accent-color) 0%, transparent 60%);
+  top: -10%;
+  left: -10%;
+  animation-delay: -5s;
+}
+
+.aurora-bg::after {
+  width: 70vw;
+  height: 70vh;
+  background: radial-gradient(circle, var(--accent-secondary) 0%, transparent 60%);
+  bottom: -20%;
+  right: -10%;
+}
+
+.aurora-blob {
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, var(--accent-tertiary) 0%, transparent 60%);
+  top: 25%;
+  left: 25%;
+  animation-delay: -10s;
+  animation-duration: 30s;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate(10%, 15%) scale(1.15) rotate(5deg); }
+  100% { transform: translate(-5%, -10%) scale(0.9) rotate(-3deg); }
+}
+
+/* Glassmorphism Evolution */
+.glass {
+  background-color: var(--surface-color);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 28px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
+}
+
+.glass::before {
+  display: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
