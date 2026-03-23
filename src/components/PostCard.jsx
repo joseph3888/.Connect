@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dataService } from '../services/mockDataService';
 import { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Send } from 'lucide-react';
+import { Heart, MessageCircle, Send, Flag, MoreHorizontal } from 'lucide-react';
 import './components.css';
 
 export function PostCard({ id, authorId, author, time, content, image, likes, comments, onLike }) {
@@ -41,6 +41,17 @@ export function PostCard({ id, authorId, author, time, content, image, likes, co
   const handleShare = (e) => {
     e.stopPropagation();
     alert("Post copied to clipboard!");
+  };
+
+  const handleReport = (e) => {
+    e.stopPropagation();
+    if (user) {
+      const reason = prompt("Why are you reporting this post?");
+      if (reason) {
+        dataService.reportContent('post', id, user.id || user.email, reason);
+        alert("Thank you. Our moderation team will review this post.");
+      }
+    }
   };
 
   const likeCount = Array.isArray(likes) ? likes.length : (typeof likes === 'number' ? likes : 0);
@@ -100,10 +111,13 @@ export function PostCard({ id, authorId, author, time, content, image, likes, co
           <span style={{ color: isLiked ? 'var(--accent-color)' : 'inherit', fontWeight: isLiked ? 800 : 'inherit' }}>{likeCount}</span>
         </button>
         <button className="action-btn" onClick={(e) => { if (!id) e.stopPropagation(); }}>
-          <MessageCircle size={20} className="icon" /> {comments}
+          <MessageCircle size={20} className="icon" /> {Array.isArray(comments) ? comments.length : (comments || 0)}
         </button>
         <button className="action-btn" onClick={handleShare}>
           <Send size={20} className="icon" /> Share
+        </button>
+        <button className="action-btn report-btn" onClick={handleReport} title="Report post">
+          <Flag size={20} className="icon" />
         </button>
       </div>
     </article>

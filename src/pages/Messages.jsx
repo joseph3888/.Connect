@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePeer } from '../context/PeerContext';
 import { dataService } from '../services/mockDataService';
-import { Phone, Video, Send, MessageSquare, Mic, Square, Play, Pause } from 'lucide-react';
+import { Phone, Video, Send, MessageSquare, Mic, Square, Play, Pause, Trash2 } from 'lucide-react';
 
 export function Messages() {
   const { user } = useAuth();
@@ -17,7 +17,6 @@ export function Messages() {
   
   useEffect(() => {
     const handleSync = () => {
-      // Refresh contacts - Filter by connection status
       if (!user) return;
       const currentUserIdentity = user.id || user.email;
       const allUsers = dataService.getAllUsers().filter(u => {
@@ -29,16 +28,13 @@ export function Messages() {
       });
       setContacts(allUsers);
       
-      // Refresh active chat if open
       if (activeChat) {
         loadMessages(activeChat.id || activeChat.email);
       }
     };
 
     window.addEventListener('db_updated', handleSync);
-    return () => {
-      window.removeEventListener('db_updated', handleSync);
-    };
+    return () => window.removeEventListener('db_updated', handleSync);
   }, [user, activeChat]);
 
   useEffect(() => {
@@ -78,6 +74,13 @@ export function Messages() {
     loadMessages(activeChat.id || activeChat.email);
   };
 
+  const handleDeleteMessage = (id) => {
+    if (confirm('Unsend this message? It will be removed for everyone.')) {
+      dataService.deleteMessage(id);
+      loadMessages(activeChat.id || activeChat.email);
+    }
+  };
+
   const openCall = (isVideo) => {
      window.dispatchEvent(new CustomEvent('initiate_call', { detail: { target: activeChat, isVideo }}));
   };
@@ -104,7 +107,7 @@ export function Messages() {
       setMediaRecorder(recorder);
       setIsRecording(true);
     } catch (err) {
-      alert("Mic access denied.");
+      alert('Mic access denied.');
     }
   };
 
@@ -123,50 +126,29 @@ export function Messages() {
 
     useEffect(() => {
       const audio = audioRef.current;
-      const updateProgress = () => {
-        setProgress((audio.currentTime / audio.duration) * 100);
-      };
-      audio.onended = () => {
-        setIsPlaying(false);
-        setProgress(0);
-      };
+      const updateProgress = () => setProgress((audio.currentTime / audio.duration) * 100);
+      audio.onended = () => { setIsPlaying(false); setProgress(0); };
       audio.ontimeupdate = updateProgress;
-      return () => {
-        audio.pause();
-        audio.onended = null;
-        audio.ontimeupdate = null;
-      };
+      return () => { audio.pause(); audio.onended = null; audio.ontimeupdate = null; };
     }, []);
 
     const togglePlay = () => {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
-      }
+      if (isPlaying) { audioRef.current.pause(); } else { audioRef.current.play(); }
       setIsPlaying(!isPlaying);
     };
 
     return (
       <div onClick={togglePlay} style={{
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '0.75rem', 
-        padding: '0.6rem 1rem', 
-        background: isMe ? 'rgba(255,255,255,0.1)' : 'var(--bg-color)', 
-        borderRadius: '99px',
-        cursor: 'pointer',
-        minWidth: '200px',
-        border: '1px solid rgba(255,255,255,0.1)',
-        position: 'relative',
-        overflow: 'hidden'
+        display: 'flex', alignItems: 'center', gap: '0.75rem',
+        padding: '0.6rem 1rem',
+        background: isMe ? 'rgba(255,255,255,0.1)' : 'var(--bg-color)',
+        borderRadius: '99px', cursor: 'pointer', minWidth: '200px',
+        border: '1px solid rgba(255,255,255,0.1)', position: 'relative', overflow: 'hidden'
       }}>
         <div style={{background: isMe ? 'white' : 'var(--accent-color)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isMe ? 'var(--accent-color)' : 'white', zIndex: 2}}>
           {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{marginLeft: '2px'}} />}
         </div>
-        <div style={{fontSize: '0.85rem', fontWeight: 700, zIndex: 2, color: isMe ? 'white' : 'var(--text-primary)'}}>
-          Voice Note
-        </div>
+        <div style={{fontSize: '0.85rem', fontWeight: 700, zIndex: 2, color: isMe ? 'white' : 'var(--text-primary)'}}>Voice Note</div>
         <div style={{flex: 1, height: '4px', background: isMe ? 'rgba(255,255,255,0.3)' : 'var(--border-color)', borderRadius: '2px', overflow: 'hidden', zIndex: 2}}>
            <div style={{width: `${progress}%`, height: '100%', background: isMe ? 'white' : 'var(--accent-color)', transition: 'width 0.1s linear'}} />
         </div>
@@ -177,7 +159,7 @@ export function Messages() {
   if (!user) return null;
 
   return (
-    <div style={{display: 'flex', height: '100%', gap: '1.5rem'}}>
+    <div style={{display: 'flex', height: '100%', gap: '1.5rem'}} className="messages-layout-wrapper">
        {/* Left Contacts Sidebar */}
        <div className="glass" style={{width: '350px', display: 'flex', flexDirection: 'column', padding: '1rem', overflowY: 'auto', borderRadius: '28px'}}>
           <h2 style={{padding: '0.5rem 0.5rem 1rem 0.5rem', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)'}}>Recent Chat</h2>
@@ -210,28 +192,15 @@ export function Messages() {
                     <h3 style={{margin: 0, color: 'var(--text-primary)'}}>{activeChat.name}</h3>
                     <div style={{fontSize: '0.75rem', color: peerStatus === 'ready' ? '#10b981' : '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600}}>
                       <div style={{width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor'}} />
-                      {peerStatus === 'ready' ? 'Signaling Ready' : 'Connecting to Satellite...'}
+                      {peerStatus === 'ready' ? 'Signaling Ready' : 'Connecting...'}
                     </div>
                   </div>
                </div>
-               {/* WebRTC Video/Audio P2P Initialization hooks */}
                <div style={{display: 'flex', gap: '1rem'}}>
-                  <button 
-                    className={`action-btn ${peerStatus !== 'ready' ? 'disabled' : ''}`} 
-                    onClick={() => openCall(false)} 
-                    style={{background: 'var(--bg-color)', width: '45px', height: '45px', justifyContent: 'center', opacity: peerStatus !== 'ready' ? 0.5 : 1}} 
-                    disabled={peerStatus !== 'ready'}
-                    title={peerStatus !== 'ready' ? "Initializing Signaling..." : "Audio Call"}
-                  >
+                  <button className={`action-btn ${peerStatus !== 'ready' ? 'disabled' : ''}`} onClick={() => openCall(false)} style={{background: 'var(--bg-color)', width: '45px', height: '45px', justifyContent: 'center', opacity: peerStatus !== 'ready' ? 0.5 : 1}} disabled={peerStatus !== 'ready'} title={peerStatus !== 'ready' ? 'Initializing Signaling...' : 'Audio Call'}>
                      <Phone fill="var(--text-secondary)" size={20} />
                   </button>
-                  <button 
-                    className={`action-btn ${peerStatus !== 'ready' ? 'disabled' : ''}`} 
-                    onClick={() => openCall(true)} 
-                    style={{background: 'var(--bg-color)', width: '45px', height: '45px', justifyContent: 'center', opacity: peerStatus !== 'ready' ? 0.5 : 1}} 
-                    disabled={peerStatus !== 'ready'}
-                    title={peerStatus !== 'ready' ? "Initializing Signaling..." : "Video Call"}
-                  >
+                  <button className={`action-btn ${peerStatus !== 'ready' ? 'disabled' : ''}`} onClick={() => openCall(true)} style={{background: 'var(--bg-color)', width: '45px', height: '45px', justifyContent: 'center', opacity: peerStatus !== 'ready' ? 0.5 : 1}} disabled={peerStatus !== 'ready'} title={peerStatus !== 'ready' ? 'Initializing Signaling...' : 'Video Call'}>
                      <Video fill="var(--text-secondary)" size={22} />
                   </button>
                </div>
@@ -245,25 +214,41 @@ export function Messages() {
                     const isMe = m.senderId === (user.id || user.email);
                     return (
                       <div key={m.id} style={{alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start'}}>
-                         <div style={{
-                            padding: m.audioUrl ? '0.5rem' : '1rem 1.25rem', 
+                        {/* Bubble + unsend button row */}
+                        <div style={{display: 'flex', alignItems: 'center', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row'}}>
+                          <div style={{
+                            padding: m.audioUrl ? '0.5rem' : '1rem 1.25rem',
                             background: isMe ? 'linear-gradient(135deg, var(--accent-hover), var(--accent-color))' : 'var(--surface-hover)',
                             color: isMe ? 'white' : 'var(--text-primary)',
                             borderBottomRightRadius: isMe ? '8px' : '24px',
                             borderBottomLeftRadius: isMe ? '24px' : '8px',
-                            borderTopLeftRadius: '24px',
-                            borderTopRightRadius: '24px',
-                            boxShadow: 'var(--shadow-sm)',
-                            lineHeight: 1.4,
-                            fontWeight: 600
-                         }}>
+                            borderTopLeftRadius: '24px', borderTopRightRadius: '24px',
+                            boxShadow: 'var(--shadow-sm)', lineHeight: 1.4, fontWeight: 600
+                          }}>
                             {m.audioUrl ? <VoiceMessage url={m.audioUrl} isMe={isMe} /> : m.text}
-                         </div>
-                         <div style={{fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.4rem', fontWeight: 500}}>
-                            {new Date(m.time).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})}
-                         </div>
+                          </div>
+                          {isMe && (
+                            <button
+                              onClick={() => handleDeleteMessage(m.id)}
+                              title="Unsend message"
+                              style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: 'var(--text-tertiary, #aaa)', padding: '5px',
+                                display: 'flex', alignItems: 'center', borderRadius: '8px',
+                                transition: 'color 0.2s, background 0.2s', flexShrink: 0
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-tertiary, #aaa)'; e.currentTarget.style.background = 'none'; }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                        <div style={{fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.4rem', fontWeight: 500}}>
+                          {new Date(m.time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                        </div>
                       </div>
-                    )
+                    );
                  })}
                  <div ref={messagesEndRef} />
               </div>
@@ -276,10 +261,7 @@ export function Messages() {
                     className="action-btn" 
                     style={{
                       background: isRecording ? '#ef4444' : 'var(--bg-color)', 
-                      width: '56px', 
-                      height: '56px', 
-                      justifyContent: 'center', 
-                      borderRadius: '50%',
+                      width: '56px', height: '56px', justifyContent: 'center', borderRadius: '50%',
                       color: isRecording ? 'white' : 'var(--text-secondary)',
                       boxShadow: isRecording ? '0 0 15px rgba(239,68,68,0.4)' : 'none'
                     }}
@@ -291,8 +273,8 @@ export function Messages() {
                     value={inputText}
                     onChange={e => setInputText(e.target.value)}
                     className="post-input" 
-                    style={{background: 'var(--bg-color)', padding: '1.15rem 1.5rem', borderRadius: '999px', fontSize: '1rem', width: '100%', boxShadow: 'inset 0 2px 4px rgba(118, 123, 111, 0.05)'}}
-                    placeholder={isRecording ? "Recording audio..." : `Message ${activeChat.name}...`} 
+                    style={{background: 'var(--bg-color)', padding: '1.15rem 1.5rem', borderRadius: '999px', fontSize: '1rem', width: '100%'}}
+                    placeholder={isRecording ? 'Recording audio...' : `Message ${activeChat.name}...`} 
                     disabled={isRecording}
                   />
                   <button type="submit" className="btn-primary" style={{padding: '1rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', flexShrink: 0, boxShadow: '0 8px 15px -4px rgba(118, 123, 111, 0.5)'}} disabled={!inputText.trim() || isRecording}>

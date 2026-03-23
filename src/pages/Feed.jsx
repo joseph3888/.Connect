@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { PostCard } from '../components/PostCard';
 import { CreatePost } from '../components/CreatePost';
+import { StoryTray } from '../components/StoryTray';
+import { TrendingSidebar } from '../components/TrendingSidebar';
 import { dataService } from '../services/mockDataService';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,21 +32,21 @@ export function Feed() {
 
   return (
     <>
-      <CreatePost onPost={handleNewPost} />
-      <div className="feed">
-        {posts.map(post => (
-          <PostCard 
-            key={post.id}
-            id={post.id}
-            authorId={post.authorId}
-            author={post.author}
-            time={post.time}
-            content={post.content}
-            likes={post.likes}
-            comments={post.comments ? post.comments.length : 0}
-            onLike={() => handleLike(post.id)}
-          />
-        ))}
+      <div className="feed-layout">
+        <div className="feed-main">
+          <StoryTray />
+          <CreatePost onPost={handleNewPost} />
+          <div className="feed">
+            {posts.map(post => (
+              <PostCard 
+                key={post.id}
+                {...post}
+                onLike={() => handleLike(post.id)}
+              />
+            ))}
+          </div>
+        </div>
+        <TrendingSidebar />
       </div>
     </>
   );

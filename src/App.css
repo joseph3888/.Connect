@@ -1,14 +1,17 @@
-/* App.css */
+/* App.css - Fully Responsive Layout System */
+/* Breakpoints: Mobile ≤480px | Phablet ≤600px | Tablet ≤768px | Laptop ≤1024px | Desktop ≤1280px+ */
+
 .layout-container {
   display: flex;
   min-height: 100vh;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
-/* Sidebar replaces Navbar */
+/* ========== SIDEBAR ========== */
 .sidebar {
   width: 280px;
+  min-width: 240px;
   height: 100vh;
   position: sticky;
   top: 0;
@@ -19,6 +22,7 @@
   background: linear-gradient(to right, rgba(255,255,255,0.4), transparent);
   z-index: 100;
   backdrop-filter: blur(10px);
+  flex-shrink: 0;
 }
 
 .logo {
@@ -87,6 +91,7 @@
   height: 44px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent-secondary), var(--accent-tertiary));
+  flex-shrink: 0;
 }
 
 .user-info {
@@ -121,61 +126,154 @@
   transform: scale(1.1);
 }
 
+/* ========== MAIN CONTENT ========== */
 .content {
   flex: 1;
   padding: 2rem 2rem 2rem 4rem;
   width: 100%;
+  min-width: 0; /* prevent flex-overflow */
 }
 
+/* ========== LAPTOP (≤1200px) - Compact sidebar, hide trending ========== */
+@media (max-width: 1200px) {
+  .layout-container {
+    max-width: 100%;
+  }
+
+  .sidebar {
+    width: 80px;
+    min-width: 80px;
+    padding: 2rem 0.75rem;
+    align-items: center;
+  }
+
+  .logo {
+    font-size: 1.5rem;
+    padding-left: 0;
+    margin-bottom: 2rem;
+  }
+
+  .nav-label, .user-info, .post-btn-text {
+    display: none;
+  }
+
+  .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding: 0.85rem;
+    width: 100%;
+  }
+
+  .nav-item:hover {
+    transform: none;
+    background-color: var(--surface-hover);
+  }
+
+  .user-profile-widget {
+    justify-content: center;
+    padding: 0.75rem;
+  }
+
+  .content {
+    padding: 2rem 1.5rem;
+  }
+}
+
+/* ========== TABLET (≤768px) - Bottom navigation bar ========== */
 @media (max-width: 768px) {
   .layout-container {
     flex-direction: column;
   }
-  
+
   .sidebar {
     width: 100%;
+    min-width: unset;
     height: auto;
+    min-height: unset;
     position: fixed;
     bottom: 0;
     top: auto;
     flex-direction: row;
-    padding: 0.75rem 1rem;
+    padding: 0.35rem 0.5rem;
     border-right: none;
     border-top: 1px solid var(--border-color);
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     align-items: center;
     justify-content: space-around;
+    z-index: 200;
+    border-radius: 0;
+    gap: 0;
+    max-height: 56px;
   }
-  
-  .logo, .user-profile-widget, .post-btn-text, .nav-label {
-    display: none;
+
+  .logo,
+  .user-profile-widget,
+  .post-btn-text,
+  .nav-label,
+  .user-info,
+  .sidebar-actions {
+    display: none !important;
   }
-  
+
   .nav-links {
     flex-direction: row;
     justify-content: space-around;
     width: 100%;
+    gap: 0;
+    flex: unset;
   }
 
   .nav-item {
-    padding: 0.75rem;
-    font-size: 1.75rem;
-    border-radius: 16px;
+    padding: 0.4rem 0.7rem;
+    font-size: 1rem;
+    border-radius: 12px;
+    gap: 0;
+    justify-content: center;
+    flex-direction: column;
+    min-height: unset;
   }
-  
+
   .nav-item:hover {
     transform: none;
   }
 
-  /* Reveal a "+" icon inside the post button on mobile since text is hidden */
+  .nav-item.active {
+    background-color: rgba(118, 123, 111, 0.12);
+    box-shadow: none;
+    color: var(--accent-color);
+  }
+
   .mobile-only {
     display: block !important;
   }
-  
+
   .content {
-    padding: 1.5rem;
-    padding-bottom: 6rem; /* space for bottom nav */
+    padding: 1rem 1rem 4.5rem 1rem;
   }
 }
+
+
+/* Laptop: hide the action button container (Post/Reel/Updates) - no room */
+@media (max-width: 1200px) {
+  .sidebar-actions {
+    display: none;
+  }
+  .nav-item.active {
+    box-shadow: none;
+  }
+}
+
+/* ========== MOBILE (≤480px) - Tighter spacing ========== */
+@media (max-width: 480px) {
+  .content {
+    padding: 0.75rem 0.75rem 5.5rem 0.75rem;
+  }
+
+  .nav-item {
+    padding: 0.55rem 0.6rem;
+    border-radius: 12px;
+  }
+}
+

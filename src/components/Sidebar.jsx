@@ -1,8 +1,9 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Home, Compass, PlaySquare, User as UserIcon, LogOut, Plus, X, MessageSquare, Video } from 'lucide-react';
-import { useState } from 'react';
+import { Home, Compass, PlaySquare, User as UserIcon, LogOut, Plus, X, MessageSquare, Video, Bell, Users } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { CreatePost } from './CreatePost';
+import { NotificationsTray } from './NotificationsTray';
 import { dataService } from '../services/mockDataService';
 import './components.css'; 
 
@@ -11,6 +12,20 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      const handleSync = () => {
+        const notifs = dataService.getNotifications(user.id || user.email);
+        setUnreadCount(notifs.filter(n => !n.read).length);
+      };
+      handleSync();
+      window.addEventListener('db_updated', handleSync);
+      return () => window.removeEventListener('db_updated', handleSync);
+    }
+  }, [user]);
 
   const handleGlobalPost = (content, image) => {
     if (user) {
@@ -28,6 +43,7 @@ export function Sidebar() {
   const navItems = [
     { path: '/', label: 'Home', icon: <Home size={24} /> },
     { path: '/explore', label: 'Explore', icon: <Compass size={24} /> },
+    { path: '/communities', label: 'Communities', icon: <Users size={24} /> },
     { path: '/reels', label: 'Reels', icon: <PlaySquare size={24} /> },
     { path: '/messages', label: 'Messages', icon: <MessageSquare size={24} /> },
     { path: `/profile/${user.email}`, label: 'Profile', icon: <UserIcon size={24} /> },
@@ -51,7 +67,7 @@ export function Sidebar() {
         ))}
         
         {/* Action Buttons */}
-        <div style={{display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem'}}>
+        <div className="sidebar-actions" style={{display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem'}}>
           <button 
             className="btn-primary" 
             onClick={() => setIsPostModalOpen(true)}
@@ -74,6 +90,16 @@ export function Sidebar() {
           >
             <Video size={20} />
             <span className="post-btn-text">Reel</span>
+          </button>
+
+          <button 
+            className="btn-primary" 
+            onClick={() => setIsNotifOpen(true)}
+            style={{width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '1rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)', boxShadow: 'none', position: 'relative'}}
+          >
+            <Bell size={20} />
+            <span className="post-btn-text">Updates</span>
+            {unreadCount > 0 && <div className="nav-badge">{unreadCount}</div>}
           </button>
         </div>
       </div>
@@ -108,6 +134,8 @@ export function Sidebar() {
         </div>
       </div>
     )}
+
+    {isNotifOpen && <NotificationsTray onClose={() => setIsNotifOpen(false)} />}
     </>
   );
 }

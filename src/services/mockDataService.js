@@ -5,9 +5,14 @@ let cache = {
   users: [],
   posts: [],
   reels: [],
+  stories: [],
+  notifications: [],
+  communities: [],
+  blockedUsers: {},
+  reports: [],
   connections: {},
   messages: [],
-  peerRegistry: {} // Mapping of user handle/email to active Peer ID
+  peerRegistry: {} 
 };
 
 const syncChannel = new BroadcastChannel('data_sync');
@@ -53,10 +58,33 @@ const defaultReels = [
 ];
 
 export const initDB = async () => {
-  const storedUsers = await localforage.getItem('users');
-  let users = storedUsers || defaultUsers;
+  const [storedUsers, storedPosts, storedReels, storedMessages, storedStories, storedNotifs, storedConns, storedComms, storedBlocked, storedReports] = await Promise.all([
+    localforage.getItem('users'),
+    localforage.getItem('posts'),
+    localforage.getItem('reels'),
+    localforage.getItem('messages'),
+    localforage.getItem('stories'),
+    localforage.getItem('notifications'),
+    localforage.getItem('connections'),
+    localforage.getItem('communities'),
+    localforage.getItem('blockedUsers'),
+    localforage.getItem('reports')
+  ]);
 
-  // MIGRATION: Ensure all users have normalized id AND email
+  let users = storedUsers || defaultUsers;
+  cache.posts = storedPosts || defaultPosts;
+  cache.reels = storedReels || defaultReels;
+  cache.messages = storedMessages || [];
+  cache.stories = storedStories || [];
+  cache.notifications = storedNotifs || [];
+  cache.communities = storedComms || [
+    { id: 'tech-hub', name: 'Tech Hub', description: 'Everything about AI and Web Dev.', avatar: 'https://i.pravatar.cc/150?u=tech', members: ['@alice', '@tech'], ownerId: '@tech' },
+    { id: 'nature-lovers', name: 'Nature Lovers', description: 'Share your best landscape shots.', avatar: 'https://i.pravatar.cc/150?u=nature', members: ['@david'], ownerId: '@david' }
+  ];
+  cache.blockedUsers = storedBlocked || {};
+  cache.reports = storedReports || [];
+  let conns = storedConns || {};
+
   let migrated = false;
   users = users.map(u => {
     if (!u) return u;
@@ -76,17 +104,7 @@ export const initDB = async () => {
   });
 
   cache.users = users;
-  if (migrated) await localforage.setItem('users', cache.users);
   
-  const storedPosts = await localforage.getItem('posts');
-  cache.posts = storedPosts || defaultPosts;
-  
-  const storedReels = await localforage.getItem('reels');
-  cache.reels = storedReels || defaultReels;
-  
-  const storedConns = await localforage.getItem('connections');
-  let conns = storedConns || {};
-
   // MIGRATION: Shift connection keys from emails to handles if needed
   if (migrated) {
     const newConns = {};
@@ -100,12 +118,10 @@ export const initDB = async () => {
     }
     conns = newConns;
     await localforage.setItem('connections', conns);
+    await localforage.setItem('users', cache.users);
   }
   cache.connections = conns;
   
-  const storedMessages = await localforage.getItem('messages');
-  cache.messages = storedMessages || [];
-
   // Seed massive videos if missing from old caches
   if (!cache.reels.find(r => r.id === 999)) {
      cache.reels.unshift(defaultReels[1]);
@@ -113,11 +129,15 @@ export const initDB = async () => {
      await localforage.setItem('reels', cache.reels);
   }
 
-  if (!storedUsers) await localforage.setItem('users', cache.users);
-  if (!storedPosts) await localforage.setItem('posts', cache.posts);
-  if (!storedReels) await localforage.setItem('reels', cache.reels);
-  if (!storedConns) await localforage.setItem('connections', cache.connections);
-  if (!storedMessages) await localforage.setItem('messages', cache.messages);
+  // Initial persist for empty DBs
+  if (!storedUsers) localforage.setItem('users', cache.users);
+  if (!storedPosts) localforage.setItem('posts', cache.posts);
+  if (!storedReels) localforage.setItem('reels', cache.reels);
+  if (!storedConns) localforage.setItem('connections', cache.connections);
+  if (!storedMessages) localforage.setItem('messages', cache.messages);
+  if (!storedComms) localforage.setItem('communities', cache.communities);
+  if (!storedBlocked) localforage.setItem('blockedUsers', cache.blockedUsers);
+  if (!storedReports) localforage.setItem('reports', cache.reports);
 };
 
 export const dataService = {
@@ -169,10 +189,16 @@ export const dataService = {
     const post = cache.posts.find(p => p.id === postId);
     if (post) {
       if (!Array.isArray(post.likes)) post.likes = [];
-      if (post.likes.includes(userId)) {
+      const liked = post.likes.includes(userId);
+      if (liked) {
         post.likes = post.likes.filter(id => id !== userId);
       } else {
         post.likes.push(userId);
+        // Notify author if it's not their own post
+        if (post.authorId !== userId) {
+          const fromUser = cache.users.find(u => u.id === userId || u.email === userId);
+          dataService.addNotification(post.authorId, userId, fromUser?.name || userId, 'like', postId);
+        }
       }
       localforage.setItem('posts', cache.posts);
       notifySync();
@@ -180,7 +206,7 @@ export const dataService = {
     }
   },
 
-  addComment: (postId, authorName, text) => {
+  addComment: (postId, authorId, authorName, text) => {
     const post = cache.posts.find(p => p.id === postId);
     if (post) {
       const newComment = {
@@ -190,6 +216,10 @@ export const dataService = {
         time: "Just now"
       };
       post.comments.push(newComment);
+      // Notify author if it's not their own post
+      if (post.authorId !== authorId) {
+        dataService.addNotification(post.authorId, authorId, authorName, 'comment', postId);
+      }
       localforage.setItem('posts', cache.posts);
       notifySync();
       return post;
@@ -214,7 +244,7 @@ export const dataService = {
       authorId: userId,
       author: authorName,
       description: desc,
-      image: videoFile, // Using 'image' as the property for the main video blob
+      image: videoFile, 
       audio: audioFile,
       color1: "rgba(118, 123, 111, 0.2)",
       color2: "rgba(43, 48, 44, 0.4)",
@@ -227,15 +257,86 @@ export const dataService = {
     return newReel;
   },
 
+  // --- STORIES (Ephemeral 24h) ---
+  getStories: () => {
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    // Filter out expired stories
+    const activeStories = cache.stories.filter(s => (now - s.timestamp) < twentyFourHours);
+    
+    // Group by user for the tray
+    const grouped = activeStories.reduce((acc, s) => {
+      if (!acc[s.userId]) acc[s.userId] = { userId: s.userId, userName: s.userName, userAvatar: s.userAvatar, slides: [] };
+      acc[s.userId].slides.push(s);
+      return acc;
+    }, {});
+    
+    return Object.values(grouped);
+  },
+
+  addStory: (userId, userName, userAvatar, content, type = 'image') => {
+    const newStory = {
+      id: Date.now(),
+      userId,
+      userName,
+      userAvatar,
+      content, // Base64 or URL
+      type, // 'image' or 'video'
+      timestamp: Date.now()
+    };
+    cache.stories.push(newStory);
+    localforage.setItem('stories', cache.stories);
+    notifySync();
+    return newStory;
+  },
+
+  // --- NOTIFICATIONS ---
+  getNotifications: (userId) => {
+    return cache.notifications
+      .filter(n => n.toUserId === userId)
+      .sort((a, b) => b.timestamp - a.timestamp);
+  },
+
+  addNotification: (toUserId, fromUserId, fromUserName, type, referenceId) => {
+    const newNotif = {
+      id: Date.now(),
+      toUserId,
+      fromUserId,
+      fromUserName,
+      type, // 'like', 'comment', 'connect'
+      referenceId,
+      timestamp: Date.now(),
+      read: false
+    };
+    cache.notifications.unshift(newNotif);
+    localforage.setItem('notifications', cache.notifications);
+    notifySync();
+    return newNotif;
+  },
+
+  markNotificationsRead: (userId) => {
+    cache.notifications.forEach(n => {
+      if (n.toUserId === userId) n.read = true;
+    });
+    localforage.setItem('notifications', cache.notifications);
+    notifySync();
+  },
+
   toggleLikeReel: (reelId, userId) => {
     if (!userId) return;
     const reel = cache.reels.find(r => r.id === reelId);
     if (reel) {
       if (!Array.isArray(reel.likes)) reel.likes = [];
-      if (reel.likes.includes(userId)) {
+      const liked = reel.likes.includes(userId);
+      if (liked) {
         reel.likes = reel.likes.filter(id => id !== userId);
       } else {
         reel.likes.push(userId);
+        // Notify author if we have an authorId
+        if (reel.authorId && reel.authorId !== userId) {
+          const fromUser = cache.users.find(u => u.id === userId || u.email === userId);
+          dataService.addNotification(reel.authorId, userId, fromUser?.name || userId, 'like', reelId);
+        }
       }
       localforage.setItem('reels', cache.reels);
       notifySync();
@@ -264,17 +365,21 @@ export const dataService = {
 
   toggleConnection: (fromUserId, toUserId) => {
     let userConns = cache.connections[fromUserId] || [];
+    const isConnecting = !userConns.includes(toUserId);
     
-    if (userConns.includes(toUserId)) {
+    if (!isConnecting) {
       userConns = userConns.filter(id => id !== toUserId);
     } else {
       userConns.push(toUserId);
+      // Notify target user
+      const fromUser = cache.users.find(u => u.id === fromUserId || u.email === fromUserId);
+      dataService.addNotification(toUserId, fromUserId, fromUser?.name || fromUserId, 'connect', fromUserId);
     }
     
     cache.connections[fromUserId] = userConns;
     localforage.setItem('connections', cache.connections);
     notifySync();
-    return userConns.includes(toUserId);
+    return isConnecting;
   },
 
   // --- MESSAGES ---
@@ -297,6 +402,12 @@ export const dataService = {
     return newMsg;
   },
 
+  deleteMessage: (id) => {
+    cache.messages = cache.messages.filter(m => m.id !== id);
+    localforage.setItem('messages', cache.messages);
+    notifySync();
+  },
+
   updatePeerRegistry: (userId, peerId) => {
     cache.peerRegistry[userId] = peerId;
     syncChannel.postMessage({ type: 'PEER_REGISTRY_UPDATE', userId, peerId });
@@ -305,5 +416,136 @@ export const dataService = {
 
   getPeerIdFromRegistry: (userId) => {
     return cache.peerRegistry[userId];
+  },
+
+  // --- COMMUNITIES ---
+  getCommunities: () => cache.communities,
+
+  getCommunityById: (id) => cache.communities.find(c => c.id === id),
+
+  createCommunity: (name, description, ownerId) => {
+    const newComm = {
+      id: name.toLowerCase().replace(/\s+/g, '-'),
+      name,
+      description,
+      avatar: `https://i.pravatar.cc/150?u=${name}`,
+      members: [ownerId],
+      ownerId
+    };
+    cache.communities.push(newComm);
+    localforage.setItem('communities', cache.communities);
+    notifySync();
+    return newComm;
+  },
+
+  toggleCommunityMembership: (commId, userId) => {
+    const comm = cache.communities.find(c => c.id === commId);
+    if (!comm) return;
+    if (comm.members.includes(userId)) {
+      comm.members = comm.members.filter(m => m !== userId);
+    } else {
+      comm.members.push(userId);
+    }
+    localforage.setItem('communities', cache.communities);
+    notifySync();
+    return comm.members.includes(userId);
+  },
+
+  getCommunityPosts: (commId) => {
+    return cache.posts.filter(p => p.communityId === commId);
+  },
+
+  addCommunityPost: (commId, authorId, authorName, content, imageBase64) => {
+    const post = dataService.addPost(authorId, authorName, content, imageBase64);
+    post.communityId = commId;
+    localforage.setItem('posts', cache.posts);
+    return post;
+  },
+
+  // --- UNIFIED SEARCH ---
+  searchAll: (query) => {
+    if (!query || query.length < 2) return { users: [], posts: [], communities: [], reels: [] };
+    const q = query.toLowerCase();
+    
+    return {
+      users: (cache.users || []).filter(u => 
+        (u.name && u.name.toLowerCase().includes(q)) || 
+        (u.id && u.id.toLowerCase().includes(q))
+      ).slice(0, 5),
+      
+      posts: (cache.posts || []).filter(p => 
+        (p.content && p.content.toLowerCase().includes(q)) ||
+        (p.author && p.author.toLowerCase().includes(q))
+      ).slice(0, 5),
+      
+      communities: (cache.communities || []).filter(c => 
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.description && c.description.toLowerCase().includes(q))
+      ).slice(0, 5),
+
+      reels: (cache.reels || []).filter(r => 
+        (r.description && r.description.toLowerCase().includes(q)) ||
+        (r.author && r.author.toLowerCase().includes(q))
+      ).slice(0, 5)
+    };
+  },
+
+  // --- PRIVACY & SAFETY ---
+  blockUser: (blockerId, targetId) => {
+    if (!cache.blockedUsers[blockerId]) cache.blockedUsers[blockerId] = [];
+    if (!cache.blockedUsers[blockerId].includes(targetId)) {
+      cache.blockedUsers[blockerId].push(targetId);
+      localforage.setItem('blockedUsers', cache.blockedUsers);
+      notifySync();
+    }
+  },
+
+  unblockUser: (blockerId, targetId) => {
+    if (cache.blockedUsers[blockerId]) {
+      cache.blockedUsers[blockerId] = cache.blockedUsers[blockerId].filter(id => id !== targetId);
+      localforage.setItem('blockedUsers', cache.blockedUsers);
+      notifySync();
+    }
+  },
+
+  isBlocked: (id1, id2) => {
+    return (cache.blockedUsers[id1]?.includes(id2)) || (cache.blockedUsers[id2]?.includes(id1));
+  },
+
+  reportContent: (type, contentId, reporterId, reason) => {
+    const report = {
+      id: Date.now(),
+      type,
+      contentId,
+      reporterId,
+      reason,
+      timestamp: new Date().toISOString()
+    };
+    cache.reports.push(report);
+    localforage.setItem('reports', cache.reports);
+    return report;
+  },
+
+  // --- SOCIAL TRENDS ---
+  getTrendingTopics: () => {
+    const tags = {};
+    cache.posts.forEach(p => {
+      if (!p.content) return;
+      const found = p.content.match(/#\w+/g);
+      if (found) {
+        found.forEach(t => {
+          const clean = t.replace('#', '').toLowerCase();
+          tags[clean] = (tags[clean] || 0) + 1;
+        });
+      }
+    });
+
+    const entries = Object.entries(tags).map(([tag, count]) => ({
+      name: `#${tag}`,
+      posts: count,
+      id: tag
+    }));
+
+    return entries.sort((a,b) => b.posts - a.posts).slice(0, 5);
   }
 };

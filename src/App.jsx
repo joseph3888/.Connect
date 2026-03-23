@@ -8,6 +8,8 @@ import { Explore } from './pages/Explore';
 import { Reels } from './pages/Reels';
 import { PostDetail } from './pages/PostDetail';
 import { Messages } from './pages/Messages';
+import { Communities } from './pages/Communities';
+import { CommunityDetail } from './pages/CommunityDetail';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -35,6 +37,8 @@ function App() {
                 <Route path="/profile/:id?" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><Explore /></ProtectedRoute>} />
                 <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
+                <Route path="/communities" element={<ProtectedRoute><Communities /></ProtectedRoute>} />
+                <Route path="/communities/:id" element={<ProtectedRoute><CommunityDetail /></ProtectedRoute>} />
                 <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
                 <Route path="/post/:id" element={<ProtectedRoute><PostDetail /></ProtectedRoute>} />
                 

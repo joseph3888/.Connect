@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { PostCard } from '../components/PostCard';
 import { dataService } from '../services/mockDataService';
-import { X, Camera } from 'lucide-react';
+import { X, Camera, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { processImage } from '../utils/imageUtils';
 
 export function Profile() {
@@ -65,6 +65,21 @@ export function Profile() {
     }
   };
 
+  const handleBlockToggle = () => {
+    if (currentUser && profileUser) {
+      const targetId = profileUser.id || profileUser.email;
+      const myId = currentUser.id || currentUser.email;
+      if (dataService.isBlocked(myId, targetId)) {
+        dataService.unblockUser(myId, targetId);
+      } else {
+        if (confirm(`Block ${profileUser.name}? You won't see each other's content.`)) {
+          dataService.blockUser(myId, targetId);
+          navigate('/'); // Redirect to home after blocking
+        }
+      }
+    }
+  };
+
   const openEditModal = () => {
     setEditName(currentUser.name || '');
     setEditUsername(currentUser.id || currentUser.email || '');
@@ -107,7 +122,19 @@ export function Profile() {
               backgroundSize: 'cover', backgroundPosition: 'center'
             }}
           ></div>
-          <div className="profile-actions">
+          <div className="profile-actions" style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+            {!isOwnProfile && (
+              <button 
+                className="btn-secondary" 
+                onClick={handleBlockToggle}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)'
+                }}
+              >
+                <ShieldAlert size={18} /> Block
+              </button>
+            )}
             {isOwnProfile ? (
               <button className="btn-primary" onClick={openEditModal}>Edit Profile</button>
             ) : (
