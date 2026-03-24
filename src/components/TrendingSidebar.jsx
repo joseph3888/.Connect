@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dataService } from '../services/mockDataService';
 import { TrendingUp, Users, ChevronRight } from 'lucide-react';
+import { getTrendingTopics, getCommunities } from '../services/firebaseDataService';
 
 export function TrendingSidebar() {
   const navigate = useNavigate();
@@ -9,13 +9,12 @@ export function TrendingSidebar() {
   const [groups, setGroups] = useState([]);
 
   useEffect(() => {
-    const load = () => {
-      setTrends(dataService.getTrendingTopics());
-      setGroups(dataService.getCommunities().slice(0, 3));
+    const load = async () => {
+      const [t, g] = await Promise.all([getTrendingTopics(), getCommunities()]);
+      setTrends(t);
+      setGroups(g.slice(0, 3));
     };
     load();
-    window.addEventListener('db_updated', load);
-    return () => window.removeEventListener('db_updated', load);
   }, []);
 
   return (
@@ -49,7 +48,7 @@ export function TrendingSidebar() {
               <div className="group-avatar-mini" style={{ backgroundImage: `url(${g.avatar})` }} />
               <div className="group-info-mini">
                 <span className="group-name-mini">{g.name}</span>
-                <span className="group-members-mini">{g.members.length} members</span>
+                <span className="group-members-mini">{(g.members || []).length} members</span>
               </div>
               <ChevronRight size={16} className="arrow-icon" />
             </div>

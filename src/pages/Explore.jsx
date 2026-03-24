@@ -1,61 +1,57 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { dataService } from '../services/mockDataService';
 import { useAuth } from '../context/AuthContext';
-import '../components/components.css'; 
+import { searchAll, getAllUsers, getCommunities } from '../services/firebaseDataService';
+import '../components/components.css';
 
 export function Explore() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState({ users: [], posts: [], communities: [], reels: [] });
+  const [results, setResults] = useState({ users: [], posts: [], communities: [] });
+  const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const handleSync = () => {
-      if (query.length >= 2) {
-        setResults(dataService.searchAll(query));
-      } else {
-        // Default suggestions
-        setResults({
-          users: dataService.getAllUsers().slice(0, 5),
-          posts: [],
-          communities: dataService.getCommunities().slice(0, 3),
-          reels: []
-        });
-      }
-    };
-    
-    handleSync();
-    window.addEventListener('db_updated', handleSync);
-    return () => window.removeEventListener('db_updated', handleSync);
-  }, [query]);
-
-  const handleConnect = (targetId) => {
-    if (user && targetId) {
-      const currentUserIdentifier = user.id || user.email;
-      dataService.toggleConnection(currentUserIdentifier, targetId);
-      // Forced local re-render for zero-latency feedback
-      setUsers(prev => [...prev]);
+  const runSearch = useCallback(async (q) => {
+    setLoading(true);
+    if (q.length >= 2) {
+      const res = await searchAll(q);
+      setResults(res);
+    } else {
+      const [users, communities] = await Promise.all([getAllUsers(), getCommunities()]);
+      // Filter out yourself
+      const filtered = users.filter(u => u.id !== user?.uid && u.email !== user?.email);
+      setResults({ users: filtered.slice(0, 8), posts: [], communities: communities.slice(0, 4) });
     }
-  };
+    setLoading(false);
+  }, [user]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => runSearch(query), 300);
+    return () => clearTimeout(timer);
+  }, [query, runSearch]);
 
   return (
     <div className="explore-page">
-      <div className="search-bar glass" style={{marginBottom: '2rem'}}>
+      <div className="search-bar glass" style={{ marginBottom: '2rem' }}>
         <Search size={20} color="var(--text-secondary)" />
-        <input 
-          type="text" 
-          placeholder="Search for people to connect with..." 
-          className="search-input" 
+        <input
+          type="text"
+          placeholder="Search people, posts, communities..."
+          className="search-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      
+
       <div className="search-results-overlay">
-        {/* Users Section */}
+        {loading && (
+          <p style={{ color: 'var(--text-secondary)', textAlign: 'center', marginTop: '2rem' }}>
+            Searching...
+          </p>
+        )}
+
+        {/* People Section */}
         {results.users.length > 0 && (
           <div className="search-section">
             <h4>People</h4>
@@ -67,7 +63,7 @@ export function Explore() {
                   </div>
                   <div className="res-info">
                     <span className="res-name">{u.name}</span>
-                    <span className="res-sub">{u.id}</span>
+                    <span className="res-sub">{u.handle || u.email}</span>
                   </div>
                 </div>
               ))}
@@ -85,7 +81,7 @@ export function Explore() {
                   <div className="res-avatar rect" style={{ backgroundImage: `url(${c.avatar})` }} />
                   <div className="res-info">
                     <span className="res-name">{c.name}</span>
-                    <span className="res-sub">{c.members.length} members</span>
+                    <span className="res-sub">{(c.members || []).length} members</span>
                   </div>
                 </div>
               ))}
@@ -99,10 +95,10 @@ export function Explore() {
             <h4>Posts</h4>
             <div className="search-list">
               {results.posts.map(p => (
-                <div key={p.id} className="search-result-item glass" onClick={() => navigate('/')}>
+                <div key={p.id} className="search-result-item glass" onClick={() => navigate(`/post/${p.id}`)}>
                   <div className="res-info">
                     <span className="res-name">{p.author}</span>
-                    <span className="res-sub">{p.content.substring(0, 60)}...</span>
+                    <span className="res-sub">{(p.content || '').substring(0, 60)}...</span>
                   </div>
                 </div>
               ))}
@@ -110,8 +106,10 @@ export function Explore() {
           </div>
         )}
 
-        {results.users.length === 0 && results.posts.length === 0 && results.communities.length === 0 && query.length >= 2 && (
-          <p style={{color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '3rem'}}>No matches found for "{query}"</p>
+        {!loading && results.users.length === 0 && results.posts.length === 0 && results.communities.length === 0 && query.length >= 2 && (
+          <p style={{ color: 'var(--text-secondary)', textAlign: 'center', marginTop: '3rem' }}>
+            No matches found for "{query}"
+          </p>
         )}
       </div>
     </div>

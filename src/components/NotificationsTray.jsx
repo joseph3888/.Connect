@@ -1,18 +1,30 @@
 import { useState, useEffect } from 'react';
 import { X, Bell, Heart, MessageCircle, UserPlus, Trash2 } from 'lucide-react';
-import { dataService } from '../services/mockDataService';
+import { getNotifications, markNotificationsRead } from '../services/firebaseDataService';
 import { useAuth } from '../context/AuthContext';
 
-export function NotificationsTray({ onClose }) {
+export function NotificationsTray({ onClose, onUnreadCount }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-    if (user) {
-      setNotifications(dataService.getNotifications(user.id || user.email));
-      dataService.markNotificationsRead(user.id || user.email);
-    }
-  }, [user]);
+    if (!user) return;
+    
+    // Real-time listener for notifications
+    const unsub = getNotifications(user.uid, (notifs) => {
+      setNotifications(notifs);
+      if (onUnreadCount) {
+        onUnreadCount(notifs.filter(n => !n.read).length);
+      }
+      
+      // Mark as read after a short delay so they see what was new
+      setTimeout(() => {
+        markNotificationsRead(user.uid).catch(console.error);
+      }, 2000);
+    });
+
+    return unsub;
+  }, [user, onUnreadCount]);
 
   const getIcon = (type) => {
     switch (type) {
@@ -47,9 +59,11 @@ export function NotificationsTray({ onClose }) {
                 {getIcon(n.type)}
               </div>
               <div className="notif-content">
-                <span className="notif-user">{n.fromUserName}</span>
+                <span className="notif-user">{n.fromName}</span>
                 <span className="notif-text">{getMessage(n)}</span>
-                <span className="notif-time">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="notif-time">
+                  {n.createdAt?.toDate ? n.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}
+                </span>
               </div>
             </div>
           ))}

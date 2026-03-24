@@ -1,38 +1,41 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dataService } from '../services/mockDataService';
 import { useAuth } from '../context/AuthContext';
-import { Users, Plus, ChevronRight } from 'lucide-react';
+import { getCommunities, createCommunity, toggleCommunityMembership } from '../services/firebaseDataService';
+import { Users, Plus } from 'lucide-react';
 
 export function Communities() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [communities, setCommunities] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
 
-  useEffect(() => {
-    setCommunities(dataService.getCommunities());
-    const handleSync = () => setCommunities(dataService.getCommunities());
-    window.addEventListener('db_updated', handleSync);
-    return () => window.removeEventListener('db_updated', handleSync);
-  }, []);
+  const load = async () => {
+    const list = await getCommunities();
+    setCommunities(list);
+    setLoading(false);
+  };
 
-  const handleCreate = (e) => {
+  useEffect(() => { load(); }, []);
+
+  const handleCreate = async (e) => {
     e.preventDefault();
     if (newName && user) {
-      dataService.createCommunity(newName, newDesc, user.id || user.email);
+      await createCommunity(newName, newDesc, user.uid);
       setShowCreateModal(false);
-      setNewName('');
-      setNewDesc('');
+      setNewName(''); setNewDesc('');
+      load();
     }
   };
 
-  const handleJoinToggle = (e, commId) => {
+  const handleJoinToggle = async (e, commId) => {
     e.stopPropagation();
     if (user) {
-      dataService.toggleCommunityMembership(commId, user.id || user.email);
+      await toggleCommunityMembership(commId, user.uid);
+      load();
     }
   };
 
@@ -51,30 +54,22 @@ export function Communities() {
         </button>
       </header>
 
+      {loading && <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>Loading communities...</p>}
+
       <div className="communities-grid">
         {communities.map(comm => {
-          const isMember = comm.members.includes(user?.id || user?.email);
+          const isMember = (comm.members || []).includes(user?.uid);
           return (
-            <div 
-              key={comm.id} 
-              className="community-card glass clickable"
-              onClick={() => navigate(`/communities/${comm.id}`)}
-            >
+            <div key={comm.id} className="community-card glass clickable" onClick={() => navigate(`/communities/${comm.id}`)}>
               <div className="comm-banner" />
               <div className="comm-info">
-                <div 
-                  className="comm-avatar" 
-                  style={{ backgroundImage: `url(${comm.avatar})` }}
-                />
+                <div className="comm-avatar" style={{ backgroundImage: `url(${comm.avatar})` }} />
                 <div className="comm-text">
                   <h3>{comm.name}</h3>
                   <p>{comm.description}</p>
-                  <span className="member-count">{comm.members.length} members</span>
+                  <span className="member-count">{(comm.members || []).length} members</span>
                 </div>
-                <button 
-                  className={`btn-join ${isMember ? 'member' : ''}`}
-                  onClick={(e) => handleJoinToggle(e, comm.id)}
-                >
+                <button className={`btn-join ${isMember ? 'member' : ''}`} onClick={(e) => handleJoinToggle(e, comm.id)}>
                   {isMember ? 'Joined' : 'Join'}
                 </button>
               </div>
@@ -88,18 +83,8 @@ export function Communities() {
           <div className="modal-content glass" onClick={e => e.stopPropagation()}>
             <h2>Start a New Community</h2>
             <form onSubmit={handleCreate} className="create-comm-form">
-              <input 
-                type="text" 
-                placeholder="Community Name (e.g. Photography, Gaming)" 
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                required
-              />
-              <textarea 
-                placeholder="What is this community about?" 
-                value={newDesc}
-                onChange={e => setNewDesc(e.target.value)}
-              />
+              <input type="text" placeholder="Community Name" value={newName} onChange={e => setNewName(e.target.value)} required />
+              <textarea placeholder="What is this community about?" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
                 <button type="submit" className="btn-primary">Launch Community</button>
