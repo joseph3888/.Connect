@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePeer } from '../context/PeerContext';
 import { getAllUsers, getMessages, sendMessage, deleteMessage, setTypingStatus, markMessageAsRead, addMessageReaction } from '../services/firebaseDataService';
-import { Phone, Video, Send, MessageSquare, Mic, Square, Play, Pause, Trash2, Image as ImageIcon, Smile, Heart, Compass, Plus, Search, MoreHorizontal, ShieldAlert } from 'lucide-react';
+import { Phone, Video, Send, MessageSquare, Mic, Square, Play, Pause, Trash2, Image as ImageIcon, Smile, Heart, Compass, Plus, Search, MoreHorizontal, ShieldAlert, ChevronLeft } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,9 +22,16 @@ export function Messages() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -155,15 +162,18 @@ export function Messages() {
   if (!user) return null;
 
   return (
-    <div className="flex bg-bg-dark h-full w-full overflow-hidden relative animate-in fade-in duration-500">
+    <div className="flex bg-bg-dark h-[calc(100vh-var(--mobile-header-height)-var(--mobile-nav-height))] md:h-screen w-full overflow-hidden relative animate-in fade-in duration-500">
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-10 pointer-events-none" />
       
       {/* ─── CONTACTS PANE ─────────────────────────────────── */}
-      <div className="w-[320px] flex flex-col border-r border-white/5 bg-bg-glass-heavy/40 backdrop-blur-3xl z-20">
+      <div className={`
+        ${isMobile && activeChat ? 'hidden' : 'w-full md:w-[320px] flex'} 
+        flex-col border-r border-white/5 bg-bg-glass-heavy/40 backdrop-blur-3xl z-20 transition-all
+      `}>
         <div className="p-6 flex flex-col gap-4 border-b border-white/5">
           <div className="flex-between">
              <h2 className="text-xl font-weight-bold tracking-tighter text-white uppercase italic">Neural Sync</h2>
-             <Button variant="glass" size="icon" className="group"><Plus size={18} className="group-hover:rotate-90 transition-transform" /></Button>
+             <Button variant="glass" size="icon"><Plus size={18} /></Button>
           </div>
           <div className="relative group">
              <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
@@ -200,63 +210,66 @@ export function Messages() {
       </div>
 
       {/* ─── CHAT MAIN WINDOW ──────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 h-full relative z-10 bg-bg-dark/50">
+      <div className={`
+        ${isMobile && !activeChat ? 'hidden' : 'flex-1 flex'} 
+        flex-col min-w-0 h-full relative z-10 bg-bg-dark/50 shadow-inner
+      `}>
         <AnimatePresence mode="popLayout" initial={false}>
           {activeChat ? (
             <div 
               key={activeChat.id} 
               className="flex flex-col h-full overflow-hidden"
             >
-              <header className="px-8 py-5 flex-between border-b border-white/5 bg-bg-glass-heavy/60 backdrop-blur-xl z-20 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-full border-2 border-primary/20 p-0.5 shadow-2xl overflow-hidden">
+              <header className="px-4 md:px-8 py-5 flex-between border-b border-white/5 bg-bg-glass-heavy/60 backdrop-blur-xl z-20 shadow-lg">
+                <div className="flex items-center gap-2 md:gap-4">
+                  {isMobile && (
+                    <button onClick={() => setActiveChat(null)} className="p-2 hover:bg-white/5 rounded-full transition-colors mr-1">
+                      <ChevronLeft size={24} className="text-secondary" />
+                    </button>
+                  )}
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-full border-2 border-primary/20 p-0.5 shadow-2xl overflow-hidden">
                      <div className="w-full h-full rounded-full" style={{ backgroundImage: activeChat.avatar ? `url(${activeChat.avatar})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: '#1a1a1c' }} />
                   </div>
                   <div>
-                    <h3 className="text-base font-weight-bold text-white mb-0.5">{activeChat.name}</h3>
+                    <h3 className="text-sm md:text-base font-weight-bold text-white mb-0.5">{activeChat.name}</h3>
                     <div className="flex items-center gap-2">
-                       <span className={`w-2 h-2 rounded-full ${peerStatus === 'ready' ? 'bg-green-500 shadow-glow' : peerStatus === 'error' ? 'bg-red-500' : 'bg-amber-400 animate-pulse'}`} />
-                       <span onClick={peerStatus === 'error' ? manualRetry : undefined} className={`text-[10px] font-weight-bold uppercase tracking-widest ${peerStatus === 'ready' ? 'text-green-400' : peerStatus === 'error' ? 'text-red-400 cursor-pointer hover:underline' : 'text-amber-400'}`}>
-                         {peerStatus === 'ready' ? 'Neural Sync Active' : peerStatus === 'error' ? `Signaling Offline (${errorType || 'Server Error'})` : 'Building Protocol...'}
+                       <span className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${peerStatus === 'ready' ? 'bg-green-500 shadow-glow' : peerStatus === 'error' ? 'bg-red-500' : 'bg-amber-400 animate-pulse'}`} />
+                       <span onClick={peerStatus === 'error' ? manualRetry : undefined} className={`text-[8px] md:text-[10px] font-weight-bold uppercase tracking-widest ${peerStatus === 'ready' ? 'text-green-400' : peerStatus === 'error' ? 'text-red-400 cursor-pointer hover:underline' : 'text-amber-400'}`}>
+                         {peerStatus === 'ready' ? 'Neural Sync Active' : peerStatus === 'error' ? `Signaling Offline` : 'Building Protocol...'}
                        </span>
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="glass" size="icon" onClick={() => openCall(false)} disabled={peerStatus === 'error'} className="!rounded-full !w-10 !h-10 transition-all"><Phone size={18} /></Button>
-                  <Button variant="glass" size="icon" onClick={() => openCall(true)} disabled={peerStatus === 'error'} className="!rounded-full !w-10 !h-10 transition-all"><Video size={18} /></Button>
-                  <Button variant="glass" size="icon" className="!rounded-full !w-10 !h-10 transition-all"><MoreHorizontal size={18} /></Button>
+                <div className="flex gap-1 md:gap-2">
+                  <Button variant="glass" size="icon" onClick={() => openCall(false)} disabled={peerStatus === 'error'} className="!rounded-full !w-9 !h-9 md:!w-10 md:!h-10"><Phone size={16} /></Button>
+                  <Button variant="glass" size="icon" onClick={() => openCall(true)} disabled={peerStatus === 'error'} className="!rounded-full !w-9 !h-9 md:!w-10 md:!h-10"><Video size={16} /></Button>
+                  <Button variant="glass" size="icon" className="!rounded-full !w-9 !h-9 md:!w-10 md:!h-10 hide-mobile"><MoreHorizontal size={16} /></Button>
                 </div>
               </header>
 
-              <div className="flex-1 overflow-y-auto px-8 py-8 flex flex-col gap-4 no-scrollbar relative shadow-inner">
-                 {/* Diagnostics Overlay if offline */}
-                 {peerStatus === 'error' && (
+              <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 md:py-8 flex flex-col gap-4 no-scrollbar relative shadow-inner">
+                {peerStatus === 'error' && (
                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="absolute inset-x-0 top-4 z-50 flex justify-center">
-                       <div className="glass-heavy bg-red-600/20 border-red-500/30 px-6 py-3 rounded-full flex items-center gap-3 shadow-glow backdrop-blur-3xl">
+                       <div className="glass-heavy bg-red-600/20 border-red-500/30 px-4 md:px-6 py-2 md:py-3 rounded-full flex items-center gap-3 shadow-glow backdrop-blur-3xl">
                           <ShieldAlert size={16} className="text-red-400" />
-                          <span className="text-[10px] font-weight-bold uppercase tracking-widest text-red-100">Signaling Blocked by network. Click status badge to retry.</span>
+                          <span className="text-[8px] md:text-[10px] font-weight-bold uppercase tracking-widest text-red-100">Signaling Blocked. Click status badge to retry.</span>
                        </div>
                     </motion.div>
-                 )}
-
+                )}
+                
                 <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-accent/5 pointer-events-none opacity-20" />
                 
                 {messages.map((m, idx) => {
                   const isMe = m.senderId === user.uid;
                   const showAvatar = idx === 0 || messages[idx-1].senderId !== m.senderId;
                   return (
-                    <motion.div key={m.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`flex ${isMe ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[85%] ${isMe ? 'ml-auto' : 'mr-auto'}`}>
+                    <motion.div key={m.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`flex ${isMe ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[90%] md:max-w-[85%] ${isMe ? 'ml-auto' : 'mr-auto'}`}>
                       {!isMe && <div className={`w-7 h-7 rounded-full border border-white/10 overflow-hidden mb-1 flex-shrink-0 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}><img src={activeChat.avatar} className="w-full h-full object-cover" /></div>}
                       <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1.5`}>
                         <div className={`px-4 py-3 relative border shadow-2xl transition-all ${isMe ? 'bg-gradient-to-br from-indigo-600 to-indigo-800 text-white rounded-2xl rounded-tr-none border-white/20' : 'bg-bg-glass-heavy text-main rounded-2xl rounded-tl-none border-white/10'}`}>
                            {m.mediaType === 'audio' && <VoiceMessage url={m.mediaUrl} isMe={isMe} />}
-                           {m.mediaType === 'image' && <img src={m.mediaUrl} alt="Visual Payload" className="max-w-[280px] rounded-lg block border border-white/10 shadow-2xl" />}
-                           {m.text && <div className="text-[13px] leading-relaxed font-weight-semi tracking-wide">{m.text}</div>}
-                           <div className={`absolute top-0 ${isMe ? 'right-full mr-2' : 'left-full ml-2'} opacity-0 group-hover:opacity-100 flex gap-1 items-center h-full transition-opacity`}>
-                              {isMe && <button onClick={() => deleteMessage(user.uid, activeChat.id, m.id)} className="p-1.5 hover:bg-red-600/30 text-white/30 rounded-full transition-colors"><Trash2 size={13} /></button>}
-                              <button onClick={() => addMessageReaction([user.uid, activeChat.id].sort().join('_'), m.id, user.uid, '❤️')} className="p-1.5 hover:bg-red-500/20 text-white/30 rounded-full transition-colors"><Heart size={13} fill="none" /></button>
-                           </div>
+                           {m.mediaType === 'image' && <img src={m.mediaUrl} alt="Visual Payload" className="max-w-full md:max-w-[280px] rounded-lg block border border-white/10 shadow-2xl" />}
+                           {m.text && <div className="text-[12px] md:text-[13px] leading-relaxed font-weight-semi tracking-wide">{m.text}</div>}
                         </div>
                         <div className="flex items-center gap-2 px-1 text-[8px] font-weight-bold uppercase tracking-widest text-muted/50 italic">{m.createdAt?.toDate ? m.createdAt.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Syncing'}</div>
                       </div>
@@ -266,13 +279,13 @@ export function Messages() {
                 <div ref={messagesEndRef} className="h-4" />
               </div>
 
-              <footer className="px-8 pb-8 pt-4 bg-transparent border-t border-white/5">
+              <footer className="px-4 md:px-8 pb-6 md:pb-8 pt-4 bg-transparent border-t border-white/5">
                 {partnerTyping && <div className="text-[10px] text-primary italic mb-3 ml-6 font-weight-bold animate-pulse">Neural partner manifested thoughts...</div>}
-                <form onSubmit={handleSend} className="bg-bg-glass-heavy/60 backdrop-blur-3xl rounded-full p-2 flex items-center gap-1 border border-white/10 shadow-3xl hover:border-white/20 transition-all focus-within:border-primary/40">
+                <form onSubmit={handleSend} className="bg-bg-glass-heavy/60 backdrop-blur-3xl rounded-3xl md:rounded-full p-2 flex items-center gap-1 border border-white/10 shadow-3xl hover:border-white/20 transition-all focus-within:border-primary/40">
                   <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
                   <Button variant="glass" size="icon" onClick={() => fileInputRef.current.click()} className="!rounded-full !w-10 !h-10 text-muted hover:text-primary transition-all"><ImageIcon size={18} /></Button>
                   <Button variant={isRecording ? 'danger' : 'glass'} size="icon" onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording} className={`!rounded-full !w-10 !h-10 ${isRecording ? 'animate-pulse' : 'text-muted'}`}>{isRecording ? <Square size={14} fill="currentColor" /> : <Mic size={18} />}</Button>
-                  <input value={inputText} onChange={e => { setInputText(e.target.value); handleTyping(); }} placeholder={`Secure transmission to ${activeChat.name}...`} className="flex-1 bg-transparent border-none py-2 px-3 text-sm focus:outline-none placeholder:text-muted/40 font-weight-bold tracking-wide" />
+                  <input value={inputText} onChange={e => { setInputText(e.target.value); handleTyping(); }} placeholder="Establish sync..." className="flex-1 bg-transparent border-none py-2 px-3 text-sm focus:outline-none placeholder:text-muted/40 font-weight-bold tracking-wide" />
                   <Button type="submit" variant="primary" size="icon" className="!rounded-full !w-11 !h-11 shadow-glow active:scale-95 transition-transform" disabled={!inputText.trim()}><Send size={18} className="ml-1" /></Button>
                 </form>
               </footer>

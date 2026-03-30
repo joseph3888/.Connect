@@ -1,8 +1,9 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { PeerProvider } from './context/PeerContext';
 import { Sidebar } from './components/Sidebar';
+import { Bell, Search, PlusCircle } from 'lucide-react';
 
 // Performance Optimization: Lazy Load Pages
 const Feed = lazy(() => import('./pages/Feed').then(module => ({ default: module.Feed })));
@@ -23,6 +24,27 @@ import { AnimatePresence } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 import './App.css';
 
+/**
+ * MobileHeader - New component for small screens
+ */
+function MobileHeader() {
+  const { user } = useAuth();
+  if (!user) return null;
+  return (
+    <header className="mobile-header show-mobile">
+      <NavLink to="/" className="mobile-logo text-main font-bold">Connect.</NavLink>
+      <div className="flex items-center gap-4">
+        <button className="text-secondary hover:text-primary transition-all"><Search size={22} /></button>
+        <button className="text-secondary hover:text-primary transition-all"><Bell size={22} /></button>
+        <div 
+          className="w-9 h-9 rounded-full border border-primary/40 overflow-hidden bg-surface-active shadow-glow" 
+          style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }} 
+        />
+      </div>
+    </header>
+  );
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
   return (
@@ -30,7 +52,7 @@ function AnimatedRoutes() {
       <Suspense fallback={
         <div className="w-full h-screen flex-center flex-col bg-bg-dark gap-4">
           <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-          <span className="text-xs font-weight-bold text-muted uppercase tracking-widest animate-pulse">Syncing Cluster...</span>
+          <span className="text-xs font-weight-bold text-muted uppercase tracking-widest animate-pulse font-sans">Syncing Cluster...</span>
         </div>
       }>
         <Routes location={location} key={location.pathname}>
@@ -65,6 +87,7 @@ function App() {
             <div className="aurora-blob"></div>
           </div>
           
+          <MobileHeader />
           <div className="layout-container">
             <Sidebar />
             <main className="content">

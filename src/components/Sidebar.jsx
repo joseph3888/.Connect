@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Home, Compass, PlaySquare, User as UserIcon, LogOut, Plus, X, MessageSquare, Video, Bell, Users, Sun, Moon, Settings as SettingsIcon } from 'lucide-react';
+import { Home, Compass, PlaySquare, User as UserIcon, LogOut, Plus, X, MessageSquare, Bell, Users, Sun, Moon, Settings as SettingsIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { CreatePost } from './CreatePost';
 import { NotificationsTray } from './NotificationsTray';
@@ -35,10 +35,8 @@ export function Sidebar() {
       await addPost(user.uid, user.name, content, imageFile, (p) => setUploadProgress(p));
       setIsPostModalOpen(false);
       setUploadProgress(0);
-      alert('Posted successfully!');
     } catch (err) {
       console.error('Post creation failed:', err);
-      alert('Failed to create post. Please try again.');
     }
   };
 
@@ -56,7 +54,7 @@ export function Sidebar() {
   return (
     <>
       <aside className="sidebar">
-        <NavLink to="/" className="logo">Connect.</NavLink>
+        <NavLink to="/" className="logo hide-mobile">Connect.</NavLink>
 
         <div className="nav-links">
           {navItems.map(item => (
@@ -71,11 +69,11 @@ export function Sidebar() {
                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full border-2 border-bg-darker" />
                 )}
               </div>
-              <span className="nav-label">{item.label}</span>
+              <span className="nav-label hide-mobile">{item.label}</span>
             </NavLink>
           ))}
 
-          <div className="mt-8 flex flex-col gap-4">
+          <div className="mt-8 flex flex-col gap-4 hide-mobile">
              <Button variant="primary" onClick={() => setIsPostModalOpen(true)} className="shadow-lg shadow-indigo-500/20">
                 <Plus size={20} />
                 <span className="post-btn-text">Quick Post</span>
@@ -94,7 +92,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        <div className="user-profile-widget glass-heavy border-white/5 group relative">
+        <div className="user-profile-widget glass-heavy border-white/5 group relative hide-mobile">
           <div className="flex items-center gap-4">
             <div className="relative">
               <div 
@@ -112,24 +110,9 @@ export function Sidebar() {
 
           <div className="absolute bottom-full left-0 right-0 mb-4 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all pointer-events-none group-hover:pointer-events-auto">
             <Card className="glass-heavy p-2 flex gap-1 justify-center border-white/10 shadow-2xl">
-              <button 
-                onClick={toggleTheme}
-                className="p-3 hover:bg-white/10 rounded-radius-md transition-colors text-main"
-              >
-                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
-              <button 
-                onClick={() => navigate('/settings')}
-                className="p-3 hover:bg-white/10 rounded-radius-md transition-colors text-main"
-              >
-                <SettingsIcon size={18} />
-              </button>
-              <button 
-                onClick={logout}
-                className="p-3 hover:bg-red-500/20 rounded-radius-md transition-colors text-red-400"
-              >
-                <LogOut size={18} />
-              </button>
+              <button onClick={toggleTheme} className="p-3 hover:bg-white/10 rounded-radius-md transition-colors text-main"><Sun size={18} /></button>
+              <button onClick={() => navigate('/settings')} className="p-3 hover:bg-white/10 rounded-radius-md transition-colors text-main"><SettingsIcon size={18} /></button>
+              <button onClick={logout} className="p-3 hover:bg-red-500/20 rounded-radius-md transition-colors text-red-400"><LogOut size={18} /></button>
             </Card>
           </div>
         </div>
@@ -140,13 +123,9 @@ export function Sidebar() {
           <div className="glass-heavy w-full max-w-2xl rounded-radius-lg overflow-hidden border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)]" onClick={e => e.stopPropagation()}>
             <div className="flex-between items-center p-6 border-b border-white/5">
               <h2 className="text-xl font-weight-bold text-main tracking-tight">Create New Post</h2>
-              <Button variant="glass" size="icon" onClick={() => setIsPostModalOpen(false)}>
-                <X size={20} />
-              </Button>
+              <Button variant="glass" size="icon" onClick={() => setIsPostModalOpen(false)}><X size={20} /></Button>
             </div>
-            <div className="p-4">
-              <CreatePost onPost={handleGlobalPost} />
-            </div>
+            <div className="p-4"><CreatePost onPost={handleGlobalPost} /></div>
           </div>
         </div>
       )}
