@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TrendingUp, Users, ChevronRight } from 'lucide-react';
 import { getTrendingTopics, getCommunities } from '../services/firebaseDataService';
+import { Card, Button, Badge } from './ui/Primitives';
 
 export function TrendingSidebar() {
   const navigate = useNavigate();
@@ -18,52 +19,84 @@ export function TrendingSidebar() {
   }, []);
 
   return (
-    <aside className="trending-sidebar">
-      <div className="trending-card glass">
-        <div className="card-header">
-          <TrendingUp size={20} className="header-icon" />
-          <h3>What's Trending</h3>
+    <aside className="sticky top-24 hidden lg:flex flex-col gap-6 h-max">
+      {/* Trending Card */}
+      <Card glass className="border-white/5 shadow-xl">
+        <div className="flex items-center gap-3 mb-6 p-1 border-b border-white/5 pb-4">
+          <div className="p-2 rounded-radius-md bg-accent/20 text-accent">
+            <TrendingUp size={20} />
+          </div>
+          <h3 className="font-weight-bold text-main text-lg tracking-tight">What's Trending</h3>
         </div>
-        <div className="trends-list">
-          {trends.map(t => (
-            <div key={t.id} className="trend-item clickable" onClick={() => navigate('/explore')}>
-              <span className="trend-name">{t.name}</span>
-              <span className="trend-count">{t.posts} posts</span>
+        
+        <div className="flex flex-col gap-4">
+          {trends.map((t, idx) => (
+            <div 
+              key={t.id || idx} 
+              className="group flex-between cursor-pointer hover:bg-white/5 p-2 rounded-radius-md transition-colors"
+              onClick={() => navigate('/explore')}
+            >
+              <div className="flex flex-col">
+                <span className="font-weight-bold text-main group-hover:text-primary transition-colors">{t.name}</span>
+                <span className="text-xs text-muted font-weight-semi uppercase tracking-widest">{t.posts} posts</span>
+              </div>
             </div>
           ))}
           {trends.length === 0 && (
-            <p className="empty-msg">No trending topics yet. Start posting with #hashtags!</p>
+            <p className="text-sm text-muted text-center py-4 bg-surface-active rounded-radius-md border border-white/5">
+              No trending topics yet.<br/>Start posting with #hashtags!
+            </p>
           )}
         </div>
-      </div>
+      </Card>
 
-      <div className="trending-card glass">
-        <div className="card-header">
-          <Users size={20} className="header-icon" />
-          <h3>Suggested Groups</h3>
+      {/* Suggested Groups Card */}
+      <Card glass className="border-white/5 shadow-xl">
+        <div className="flex items-center gap-3 mb-6 p-1 border-b border-white/5 pb-4">
+          <div className="p-2 rounded-radius-md bg-primary/20 text-primary">
+            <Users size={20} />
+          </div>
+          <h3 className="font-weight-bold text-main text-lg tracking-tight">Suggested Groups</h3>
         </div>
-        <div className="groups-list">
-          {groups.map(g => (
-            <div key={g.id} className="group-item clickable" onClick={() => navigate(`/communities/${g.id}`)}>
-              <div className="group-avatar-mini" style={{ backgroundImage: `url(${g.avatar})` }} />
-              <div className="group-info-mini">
-                <span className="group-name-mini">{g.name}</span>
-                <span className="group-members-mini">{(g.members || []).length} members</span>
+
+        <div className="flex flex-col gap-5">
+          {groups.map((g, idx) => (
+            <div 
+              key={g.id || idx} 
+              className="group flex items-center justify-between cursor-pointer hover:bg-surface-active/50 p-2 -mx-2 rounded-radius-md transition-all border border-transparent hover:border-white/5"
+              onClick={() => navigate(`/communities/${g.id}`)}
+            >
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-10 h-10 rounded-radius-md bg-surface-active bg-cover bg-center border border-white/10 group-hover:border-primary/50 transition-colors shadow-md"
+                  style={{ backgroundImage: `url(${g.avatar})` }}
+                />
+                <div className="flex flex-col">
+                  <span className="font-weight-bold text-sm text-main group-hover:text-main line-clamp-1 truncate w-32">{g.name}</span>
+                  <span className="text-[10px] text-primary uppercase font-weight-bold tracking-widest">
+                    {(g.members || []).length} members
+                  </span>
+                </div>
               </div>
-              <ChevronRight size={16} className="arrow-icon" />
+              <ChevronRight size={16} className="text-muted group-hover:text-primary transform group-hover:translate-x-1 transition-all" />
             </div>
           ))}
         </div>
-        <button className="view-more-btn" onClick={() => navigate('/communities')}>
+        
+        <Button 
+          variant="glass" 
+          className="w-full mt-6 text-xs !py-3 uppercase tracking-widest"
+          onClick={() => navigate('/communities')}
+        >
           See all communities
-        </button>
-      </div>
+        </Button>
+      </Card>
 
-      <div className="footer-links">
-        <span>About</span>
-        <span>Privacy</span>
-        <span>Terms</span>
-        <span>© 2026 Connect.</span>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted/60 font-weight-semi px-2">
+        <span className="hover:text-primary cursor-pointer transition-colors">About</span>
+        <span className="hover:text-primary cursor-pointer transition-colors">Privacy</span>
+        <span className="hover:text-primary cursor-pointer transition-colors">Terms</span>
+        <span className="w-full mt-2">© 2026 Connect.</span>
       </div>
     </aside>
   );

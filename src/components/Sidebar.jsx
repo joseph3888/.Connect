@@ -1,96 +1,152 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Home, Compass, PlaySquare, User as UserIcon, LogOut, Plus, X, MessageSquare, Video, Bell, Users } from 'lucide-react';
+import { Home, Compass, PlaySquare, User as UserIcon, LogOut, Plus, X, MessageSquare, Video, Bell, Users, Sun, Moon, Settings as SettingsIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { CreatePost } from './CreatePost';
 import { NotificationsTray } from './NotificationsTray';
 import { addPost } from '../services/firebaseDataService';
-import { useLocation } from 'react-router-dom';
+import { Button, Card } from './ui/Primitives';
 import './components.css';
 
 export function Sidebar() {
   const { user, logout } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  useEffect(() => {
+    if (isDarkMode) document.body.classList.add('dark');
+    else document.body.classList.remove('dark');
+  }, [isDarkMode]);
+
+  const toggleTheme = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    document.body.classList.toggle('dark', newMode);
+    localStorage.setItem('theme', newMode ? 'dark' : 'light');
+  };
+
+  const handleGlobalPost = async (content, imageFile) => {
+    try {
+      setUploadProgress(0);
+      await addPost(user.uid, user.name, content, imageFile, (p) => setUploadProgress(p));
+      setIsPostModalOpen(false);
+      setUploadProgress(0);
+      alert('Posted successfully!');
+    } catch (err) {
+      console.error('Post creation failed:', err);
+      alert('Failed to create post. Please try again.');
+    }
+  };
 
   if (!user) return null;
 
   const navItems = [
-    { path: '/', label: 'Home', icon: <Home size={22} /> },
-    { path: '/explore', label: 'Explore', icon: <Compass size={22} /> },
-    { path: '/communities', label: 'Communities', icon: <Users size={22} /> },
-    { path: '/reels', label: 'Reels', icon: <PlaySquare size={22} /> },
-    { path: '/messages', label: 'Messages', icon: <MessageSquare size={22} /> },
-    { path: `/profile/${user.uid}`, label: 'Profile', icon: <UserIcon size={22} /> },
+    { path: '/', label: 'Home', icon: <Home size={22} strokeWidth={2.5} /> },
+    { path: '/explore', label: 'Explore', icon: <Compass size={22} strokeWidth={2.5} /> },
+    { path: '/communities', label: 'Communities', icon: <Users size={22} strokeWidth={2.5} /> },
+    { path: '/reels', label: 'Reels', icon: <PlaySquare size={22} strokeWidth={2.5} /> },
+    { path: '/messages', label: 'Messages', icon: <MessageSquare size={22} strokeWidth={2.5} /> },
+    { path: `/profile/${user.uid}`, label: 'Profile', icon: <UserIcon size={22} strokeWidth={2.5} /> },
   ];
-
-  const handleGlobalPost = async (content, image) => {
-    if (user) {
-      await addPost(user.uid, user.name, content, image);
-      setIsPostModalOpen(false);
-      if (location.pathname !== '/') navigate('/');
-    }
-  };
 
   return (
     <>
       <aside className="sidebar">
-        <Link to="/" className="logo">Connect.</Link>
+        <NavLink to="/" className="logo">Connect.</NavLink>
 
         <div className="nav-links">
           {navItems.map(item => (
-            <Link
+            <NavLink
               key={item.path}
               to={item.path}
-              className={`nav-item ${location.pathname === item.path || (item.path.startsWith('/profile') && location.pathname.startsWith('/profile')) ? 'active' : ''}`}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
-              <span style={{ display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+              <div className="relative flex-center">
+                {item.icon}
+                {item.label === 'Messages' && unreadCount > 0 && (
+                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full border-2 border-bg-darker" />
+                )}
+              </div>
               <span className="nav-label">{item.label}</span>
-            </Link>
+            </NavLink>
           ))}
 
-          <div className="sidebar-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.25rem' }}>
-            <button className="btn-primary" onClick={() => setIsPostModalOpen(true)} style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.9rem' }}>
-              <Plus size={18} />
-              <span className="post-btn-text">Post</span>
-            </button>
-
-            <button className="btn-primary" onClick={() => { navigate('/reels'); }} style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.9rem', background: 'transparent', border: '1px solid var(--accent-color)', color: 'var(--accent-color)', boxShadow: 'none' }}>
-              <Video size={18} />
-              <span className="post-btn-text">Reel</span>
-            </button>
-
-            <button className="btn-primary" onClick={() => setIsNotifOpen(true)} style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.9rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)', boxShadow: 'none', position: 'relative' }}>
-              <Bell size={18} />
-              <span className="post-btn-text">Updates</span>
-              {unreadCount > 0 && <div className="nav-badge">{unreadCount}</div>}
-            </button>
+          <div className="mt-8 flex flex-col gap-4">
+             <Button variant="primary" onClick={() => setIsPostModalOpen(true)} className="shadow-lg shadow-indigo-500/20">
+                <Plus size={20} />
+                <span className="post-btn-text">Quick Post</span>
+             </Button>
+             
+             <button 
+                onClick={() => setIsNotifOpen(true)}
+                className="relative flex items-center gap-4 p-4 rounded-radius-md hover:bg-white/5 transition-all text-secondary hover:text-main group"
+             >
+                <div className="relative">
+                  <Bell size={22} strokeWidth={2.5} />
+                  {unreadCount > 0 && <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full border-2 border-bg-darker" />}
+                </div>
+                <span className="nav-label">Notifications</span>
+             </button>
           </div>
         </div>
 
-        <div className="user-profile-widget">
-          <div className="avatar" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }} />
-          <div className="user-info">
-            <span className="user-name">{user.name}</span>
-            <span className="user-handle">{user.handle || user.email}</span>
+        <div className="user-profile-widget glass-heavy border-white/5 group relative">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div 
+                className="w-12 h-12 rounded-full border-2 border-primary/30 shadow-xl overflow-hidden bg-surface-active" 
+                style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }} 
+              />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-4 border-bg-glass-heavy shadow-[0_0_10px_rgba(74,222,128,0.5)]" />
+            </div>
+            
+            <div className="user-info flex-1 min-w-0">
+              <div className="font-weight-bold text-main truncate text-sm tracking-tight">{user.name}</div>
+              <div className="text-[10px] text-primary font-weight-bold uppercase tracking-widest">{user.handle || 'Platinum Member'}</div>
+            </div>
           </div>
-          <button onClick={logout} className="logout-icon" style={{ display: 'flex', alignItems: 'center', background: 'transparent', border: 'none' }} title="Log Out">
-            <LogOut size={18} />
-          </button>
+
+          <div className="absolute bottom-full left-0 right-0 mb-4 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all pointer-events-none group-hover:pointer-events-auto">
+            <Card className="glass-heavy p-2 flex gap-1 justify-center border-white/10 shadow-2xl">
+              <button 
+                onClick={toggleTheme}
+                className="p-3 hover:bg-white/10 rounded-radius-md transition-colors text-main"
+              >
+                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <button 
+                onClick={() => navigate('/settings')}
+                className="p-3 hover:bg-white/10 rounded-radius-md transition-colors text-main"
+              >
+                <SettingsIcon size={18} />
+              </button>
+              <button 
+                onClick={logout}
+                className="p-3 hover:bg-red-500/20 rounded-radius-md transition-colors text-red-400"
+              >
+                <LogOut size={18} />
+              </button>
+            </Card>
+          </div>
         </div>
       </aside>
 
       {isPostModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsPostModalOpen(false)}>
-          <div className="modal-content glass" onClick={e => e.stopPropagation()} style={{ padding: '0.5rem', maxWidth: '600px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 1.5rem 0' }}>
-              <h2 style={{ fontSize: '1.25rem' }}>Create New Post</h2>
-              <button onClick={() => setIsPostModalOpen(false)} style={{ background: 'transparent', border: 'none' }}><X size={22} /></button>
+        <div className="fixed inset-0 z-[2000] flex-center bg-black/80 backdrop-blur-md p-4" onClick={() => setIsPostModalOpen(false)}>
+          <div className="glass-heavy w-full max-w-2xl rounded-radius-lg overflow-hidden border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)]" onClick={e => e.stopPropagation()}>
+            <div className="flex-between items-center p-6 border-b border-white/5">
+              <h2 className="text-xl font-weight-bold text-main tracking-tight">Create New Post</h2>
+              <Button variant="glass" size="icon" onClick={() => setIsPostModalOpen(false)}>
+                <X size={20} />
+              </Button>
             </div>
-            <CreatePost onPost={handleGlobalPost} />
+            <div className="p-4">
+              <CreatePost onPost={handleGlobalPost} />
+            </div>
           </div>
         </div>
       )}

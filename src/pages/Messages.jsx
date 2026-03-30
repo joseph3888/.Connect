@@ -1,62 +1,86 @@
+/* eslint-disable no-unused-vars */
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePeer } from '../context/PeerContext';
-import { getAllUsers, getMessages, sendMessage, deleteMessage, toggleConnection, isConnected } from '../services/firebaseDataService';
-import { Phone, Video, Send, MessageSquare, Mic, Square, Play, Pause, Trash2 } from 'lucide-react';
+import { getAllUsers, getMessages, sendMessage, deleteMessage, setTypingStatus, markMessageAsRead, addMessageReaction } from '../services/firebaseDataService';
+import { Phone, Video, Send, MessageSquare, Mic, Square, Play, Pause, Trash2, Image as ImageIcon, Smile, Heart, Compass, Plus, Search, MoreHorizontal, ShieldAlert } from 'lucide-react';
+import { db } from '../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button, Card, Badge } from '../components/ui/Primitives';
 
 export function Messages() {
   const { user } = useAuth();
+  const { peer, peerStatus, manualRetry, errorType } = usePeer();
   const [contacts, setContacts] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
-  const [unsubscribeMsg, setUnsubscribeMsg] = useState(null);
-  const { peerStatus } = usePeer();
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isTyping, setIsTyping] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-  // Load all cloud users as potential contacts
   useEffect(() => {
     if (!user) return;
     getAllUsers().then(all => {
-      const others = all.filter(u => u.id !== user.uid);
-      setContacts(others);
+      setContacts(all.filter(u => u.id !== user.uid));
     });
   }, [user]);
 
-  // Subscribe to real-time messages in active chat
   useEffect(() => {
-    if (unsubscribeMsg) unsubscribeMsg();
     if (!activeChat || !user) return;
 
+    const chatId = [user.uid, activeChat.id].sort().join('_');
     const unsub = getMessages(user.uid, activeChat.id, (msgs) => {
       setMessages(msgs);
+      msgs.forEach(m => {
+        if (!m.read && m.senderId !== user.uid) markMessageAsRead(chatId, m.id);
+      });
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
-    setUnsubscribeMsg(() => unsub);
-    return unsub;
-  }, [activeChat, user]);
+    
+    const unsubTyping = onSnapshot(doc(db, 'chats', chatId, 'presence', activeChat.id), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setPartnerTyping(data.isTyping && (Date.now() - (data.updatedAt?.toMillis() || 0) < 5000));
+      } else {
+        setPartnerTyping(false);
+      }
+    });
 
-  const handleSelectChat = (contact) => {
-    setActiveChat(contact);
-  };
+    return () => {
+      unsub();
+      unsubTyping();
+    };
+  }, [activeChat?.id, user?.uid]);
+
+  const handleSelectChat = (contact) => setActiveChat(contact);
 
   const handleSend = async (e) => {
     e.preventDefault();
     if (!inputText.trim() || !activeChat) return;
-    await sendMessage(user.uid, activeChat.id, inputText);
+    const text = inputText;
     setInputText('');
+    await sendMessage(user.uid, activeChat.id, text);
   };
 
-  const handleDeleteMessage = async (messageId) => {
-    if (confirm('Unsend this message? It will be removed for everyone.')) {
-      await deleteMessage(user.uid, activeChat.id, messageId);
+  const handleTyping = () => {
+    if (!activeChat) return;
+    if (!isTyping) {
+      setIsTyping(true);
+      setTypingStatus(user.uid, activeChat.id, true);
     }
-  };
-
-  const openCall = (isVideo) => {
-    window.dispatchEvent(new CustomEvent('initiate_call', { detail: { target: activeChat, isVideo } }));
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+      setTypingStatus(user.uid, activeChat.id, false);
+    }, 3000);
   };
 
   const startRecording = async () => {
@@ -64,47 +88,65 @@ export function Messages() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       const chunks = [];
-      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.ondataavailable = e => chunks.push(e.data);
       recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/ogg; codecs=opus' });
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = async () => {
-          await sendMessage(user.uid, activeChat.id, '', reader.result);
-          stream.getTracks().forEach(t => t.stop());
-        };
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        await sendMessage(user.uid, activeChat.id, '', null, null, blob);
+        stream.getTracks().forEach(t => t.stop());
       };
       recorder.start();
       setMediaRecorder(recorder);
       setIsRecording(true);
-    } catch {
-      alert('Mic access denied.');
-    }
+    } catch (err) { console.error('Mic access denied:', err); }
   };
 
   const stopRecording = () => {
-    if (mediaRecorder) { mediaRecorder.stop(); setIsRecording(false); setMediaRecorder(null); }
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (file && activeChat) {
+      setIsUploading(true);
+      setUploadProgress(0);
+      try {
+        await sendMessage(user.uid, activeChat.id, '', null, file);
+      } catch (err) { console.error('Image upload failed:', err); } 
+      finally { setIsUploading(false); }
+    }
+  };
+
+  const openCall = (isVideo) => {
+    if (!activeChat) return;
+    window.dispatchEvent(new CustomEvent('initiate_call', { detail: { target: activeChat, isVideo } }));
   };
 
   const VoiceMessage = ({ url, isMe }) => {
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [progress, setProgress] = useState(0);
+    const [playing, setPlaying] = useState(false);
     const audioRef = useRef(new Audio(url));
     useEffect(() => {
-      const audio = audioRef.current;
-      audio.onended = () => { setIsPlaying(false); setProgress(0); };
-      audio.ontimeupdate = () => setProgress((audio.currentTime / audio.duration) * 100);
-      return () => { audio.pause(); audio.onended = null; audio.ontimeupdate = null; };
+       const a = audioRef.current;
+       const handleEnd = () => setPlaying(false);
+       a.addEventListener('ended', handleEnd);
+       return () => a.removeEventListener('ended', handleEnd);
     }, []);
-    const togglePlay = () => { isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); };
+    const toggle = () => {
+       if (playing) audioRef.current.pause();
+       else audioRef.current.play();
+       setPlaying(!playing);
+    };
     return (
-      <div onClick={togglePlay} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 1rem', background: isMe ? 'rgba(255,255,255,0.1)' : 'var(--bg-color)', borderRadius: '99px', cursor: 'pointer', minWidth: '180px' }}>
-        <div style={{ background: isMe ? 'white' : 'var(--accent-color)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isMe ? 'var(--accent-color)' : 'white' }}>
-          {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: '2px' }} />}
-        </div>
-        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: isMe ? 'white' : 'var(--text-primary)' }}>Voice Note</div>
-        <div style={{ flex: 1, height: '4px', background: isMe ? 'rgba(255,255,255,0.3)' : 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
-          <div style={{ width: `${progress}%`, height: '100%', background: isMe ? 'white' : 'var(--accent-color)', transition: 'width 0.1s linear' }} />
+      <div className={`flex items-center gap-3 p-2 rounded-full ${isMe ? 'bg-white/20' : 'bg-primary/20'}`}>
+        <button onClick={toggle} className="w-8 h-8 rounded-full bg-white/10 flex-center hover:bg-white/20 transition-all">
+           {playing ? <Pause size={14} /> : <Play size={14} />}
+        </button>
+        <div className="flex gap-0.5 h-3 items-center">
+           {[...Array(6)].map((_, i) => (
+              <div key={i} className={`w-0.5 bg-white/40 rounded-full ${playing ? 'animate-pulse' : ''}`} style={{ height: `${40 + Math.random() * 60}%`, animationDelay: `${i * 0.1}s` }} />
+           ))}
         </div>
       </div>
     );
@@ -113,115 +155,135 @@ export function Messages() {
   if (!user) return null;
 
   return (
-    <div style={{ display: 'flex', height: '100%', gap: '1.5rem' }} className="messages-layout-wrapper">
-      {/* Left Contacts */}
-      <div className="glass" style={{ width: '300px', display: 'flex', flexDirection: 'column', padding: '1rem', overflowY: 'auto', borderRadius: '28px', flexShrink: 0 }}>
-        <h2 style={{ padding: '0.5rem 0.5rem 1rem 0.5rem', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>Messages</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
-          {contacts.length === 0 && (
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', padding: '1rem', textAlign: 'center' }}>
-              No users yet. Go to Explore to find people!
-            </p>
-          )}
+    <div className="flex bg-bg-dark h-full w-full overflow-hidden relative animate-in fade-in duration-500">
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-10 pointer-events-none" />
+      
+      {/* ─── CONTACTS PANE ─────────────────────────────────── */}
+      <div className="w-[320px] flex flex-col border-r border-white/5 bg-bg-glass-heavy/40 backdrop-blur-3xl z-20">
+        <div className="p-6 flex flex-col gap-4 border-b border-white/5">
+          <div className="flex-between">
+             <h2 className="text-xl font-weight-bold tracking-tighter text-white uppercase italic">Neural Sync</h2>
+             <Button variant="glass" size="icon" className="group"><Plus size={18} className="group-hover:rotate-90 transition-transform" /></Button>
+          </div>
+          <div className="relative group">
+             <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
+             <input type="text" placeholder="Access identity..." className="w-full bg-white/5 border border-white/10 rounded-full py-2.5 pl-11 pr-4 text-xs font-weight-bold tracking-wider outline-none focus:border-primary/40 transition-all font-sans" />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2 no-scrollbar space-y-1">
           {contacts.map(c => (
             <div
               key={c.id}
               onClick={() => handleSelectChat(c)}
-              style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.85rem', borderRadius: '16px', cursor: 'pointer', background: activeChat?.id === c.id ? 'var(--surface-hover)' : 'transparent', transition: 'all 0.2s ease' }}
+              className={`
+                flex items-center gap-3 p-3 rounded-radius-md cursor-pointer transition-all border
+                ${activeChat?.id === c.id 
+                  ? 'bg-primary/20 border-primary/30 shadow-glow mx-1' 
+                  : 'hover:bg-white/5 border-transparent'}
+              `}
             >
-              <div className="avatar small" style={{ backgroundImage: c.avatar ? `url(${c.avatar})` : 'none', flexShrink: 0 }} />
-              <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{c.handle || c.email}</div>
+              <div className="relative">
+                <div className="w-11 h-11 rounded-full border border-white/10 overflow-hidden" style={{ backgroundImage: c.avatar ? `url(${c.avatar})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: '#1a1a1c' }} />
+                <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-bg-dark ${c.online ? 'bg-green-500 shadow-glow' : 'bg-muted'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex-between mb-0.5">
+                  <span className="font-weight-bold text-main truncate text-xs">{c.name}</span>
+                  <Badge variant="glass" className="text-[8px] opacity-40">NODE</Badge>
+                </div>
+                <div className="text-[11px] text-muted truncate opacity-80">@{c.handle || 'platinum'}</div>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Active Chat */}
-      <div className="glass" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRadius: '28px' }}>
-        {activeChat ? (
-          <>
-            {/* Header */}
-            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-hover)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div className="avatar" style={{ backgroundImage: activeChat.avatar ? `url(${activeChat.avatar})` : 'none', width: '42px', height: '42px' }} />
-                <div>
-                  <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem' }}>{activeChat.name}</h3>
-                  <div style={{ fontSize: '0.75rem', color: peerStatus === 'ready' ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
-                    {peerStatus === 'ready' ? '● Online' : '● Connecting...'}
+      {/* ─── CHAT MAIN WINDOW ──────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0 h-full relative z-10 bg-bg-dark/50">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {activeChat ? (
+            <div 
+              key={activeChat.id} 
+              className="flex flex-col h-full overflow-hidden"
+            >
+              <header className="px-8 py-5 flex-between border-b border-white/5 bg-bg-glass-heavy/60 backdrop-blur-xl z-20 shadow-lg">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-full border-2 border-primary/20 p-0.5 shadow-2xl overflow-hidden">
+                     <div className="w-full h-full rounded-full" style={{ backgroundImage: activeChat.avatar ? `url(${activeChat.avatar})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: '#1a1a1c' }} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-weight-bold text-white mb-0.5">{activeChat.name}</h3>
+                    <div className="flex items-center gap-2">
+                       <span className={`w-2 h-2 rounded-full ${peerStatus === 'ready' ? 'bg-green-500 shadow-glow' : peerStatus === 'error' ? 'bg-red-500' : 'bg-amber-400 animate-pulse'}`} />
+                       <span onClick={peerStatus === 'error' ? manualRetry : undefined} className={`text-[10px] font-weight-bold uppercase tracking-widest ${peerStatus === 'ready' ? 'text-green-400' : peerStatus === 'error' ? 'text-red-400 cursor-pointer hover:underline' : 'text-amber-400'}`}>
+                         {peerStatus === 'ready' ? 'Neural Sync Active' : peerStatus === 'error' ? `Signaling Offline (${errorType || 'Server Error'})` : 'Building Protocol...'}
+                       </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button className="action-btn" onClick={() => openCall(false)} style={{ background: 'var(--bg-color)', width: '42px', height: '42px', justifyContent: 'center' }} title="Audio Call">
-                  <Phone size={18} />
-                </button>
-                <button className="action-btn" onClick={() => openCall(true)} style={{ background: 'var(--bg-color)', width: '42px', height: '42px', justifyContent: 'center' }} title="Video Call">
-                  <Video size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {messages.length === 0 && (
-                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '3rem' }}>
-                  🔒 End-to-end encrypted.<br />Say hello to {activeChat.name}!
+                <div className="flex gap-2">
+                  <Button variant="glass" size="icon" onClick={() => openCall(false)} disabled={peerStatus === 'error'} className="!rounded-full !w-10 !h-10 transition-all"><Phone size={18} /></Button>
+                  <Button variant="glass" size="icon" onClick={() => openCall(true)} disabled={peerStatus === 'error'} className="!rounded-full !w-10 !h-10 transition-all"><Video size={18} /></Button>
+                  <Button variant="glass" size="icon" className="!rounded-full !w-10 !h-10 transition-all"><MoreHorizontal size={18} /></Button>
                 </div>
-              )}
-              {messages.map(m => {
-                const isMe = m.senderId === user.uid;
-                return (
-                  <div key={m.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                      <div style={{ padding: m.audioUrl ? '0.5rem' : '0.85rem 1.15rem', background: isMe ? 'linear-gradient(135deg, var(--accent-hover), var(--accent-color))' : 'var(--surface-hover)', color: isMe ? 'white' : 'var(--text-primary)', borderBottomRightRadius: isMe ? '6px' : '20px', borderBottomLeftRadius: isMe ? '20px' : '6px', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', fontWeight: 600 }}>
-                        {m.audioUrl ? <VoiceMessage url={m.audioUrl} isMe={isMe} /> : m.text}
+              </header>
+
+              <div className="flex-1 overflow-y-auto px-8 py-8 flex flex-col gap-4 no-scrollbar relative shadow-inner">
+                 {/* Diagnostics Overlay if offline */}
+                 {peerStatus === 'error' && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="absolute inset-x-0 top-4 z-50 flex justify-center">
+                       <div className="glass-heavy bg-red-600/20 border-red-500/30 px-6 py-3 rounded-full flex items-center gap-3 shadow-glow backdrop-blur-3xl">
+                          <ShieldAlert size={16} className="text-red-400" />
+                          <span className="text-[10px] font-weight-bold uppercase tracking-widest text-red-100">Signaling Blocked by network. Click status badge to retry.</span>
+                       </div>
+                    </motion.div>
+                 )}
+
+                <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-accent/5 pointer-events-none opacity-20" />
+                
+                {messages.map((m, idx) => {
+                  const isMe = m.senderId === user.uid;
+                  const showAvatar = idx === 0 || messages[idx-1].senderId !== m.senderId;
+                  return (
+                    <motion.div key={m.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`flex ${isMe ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[85%] ${isMe ? 'ml-auto' : 'mr-auto'}`}>
+                      {!isMe && <div className={`w-7 h-7 rounded-full border border-white/10 overflow-hidden mb-1 flex-shrink-0 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}><img src={activeChat.avatar} className="w-full h-full object-cover" /></div>}
+                      <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1.5`}>
+                        <div className={`px-4 py-3 relative border shadow-2xl transition-all ${isMe ? 'bg-gradient-to-br from-indigo-600 to-indigo-800 text-white rounded-2xl rounded-tr-none border-white/20' : 'bg-bg-glass-heavy text-main rounded-2xl rounded-tl-none border-white/10'}`}>
+                           {m.mediaType === 'audio' && <VoiceMessage url={m.mediaUrl} isMe={isMe} />}
+                           {m.mediaType === 'image' && <img src={m.mediaUrl} alt="Visual Payload" className="max-w-[280px] rounded-lg block border border-white/10 shadow-2xl" />}
+                           {m.text && <div className="text-[13px] leading-relaxed font-weight-semi tracking-wide">{m.text}</div>}
+                           <div className={`absolute top-0 ${isMe ? 'right-full mr-2' : 'left-full ml-2'} opacity-0 group-hover:opacity-100 flex gap-1 items-center h-full transition-opacity`}>
+                              {isMe && <button onClick={() => deleteMessage(user.uid, activeChat.id, m.id)} className="p-1.5 hover:bg-red-600/30 text-white/30 rounded-full transition-colors"><Trash2 size={13} /></button>}
+                              <button onClick={() => addMessageReaction([user.uid, activeChat.id].sort().join('_'), m.id, user.uid, '❤️')} className="p-1.5 hover:bg-red-500/20 text-white/30 rounded-full transition-colors"><Heart size={13} fill="none" /></button>
+                           </div>
+                        </div>
+                        <div className="flex items-center gap-2 px-1 text-[8px] font-weight-bold uppercase tracking-widest text-muted/50 italic">{m.createdAt?.toDate ? m.createdAt.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Syncing'}</div>
                       </div>
-                      {isMe && (
-                        <button
-                          onClick={() => handleDeleteMessage(m.id)}
-                          title="Unsend"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px', borderRadius: '8px', transition: 'color 0.2s' }}
-                          onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; }}
-                          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                      {m.createdAt?.toDate ? m.createdAt.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'now'}
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </div>
+                    </motion.div>
+                  );
+                })}
+                <div ref={messagesEndRef} className="h-4" />
+              </div>
 
-            {/* Input */}
-            <form onSubmit={handleSend} style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '0.75rem', background: 'var(--surface-hover)', alignItems: 'center' }}>
-              <button type="button" onClick={isRecording ? stopRecording : startRecording} className="action-btn" style={{ background: isRecording ? '#ef4444' : 'var(--bg-color)', width: '48px', height: '48px', justifyContent: 'center', borderRadius: '50%', color: isRecording ? 'white' : 'var(--text-secondary)', boxShadow: isRecording ? '0 0 12px rgba(239,68,68,0.4)' : 'none', flexShrink: 0 }}>
-                {isRecording ? <Square size={18} fill="currentColor" /> : <Mic size={20} />}
-              </button>
-              <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} className="post-input" style={{ background: 'var(--bg-color)', padding: '0.9rem 1.25rem', borderRadius: '999px', fontSize: '0.95rem', width: '100%' }} placeholder={isRecording ? 'Recording...' : `Message ${activeChat.name}...`} disabled={isRecording} />
-              <button type="submit" className="btn-primary" style={{ width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} disabled={!inputText.trim() || isRecording}>
-                <Send size={18} style={{ marginLeft: '2px' }} />
-              </button>
-            </form>
-          </>
-        ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexDirection: 'column', gap: '1.5rem', textAlign: 'center', padding: '2rem' }}>
-            <div style={{ background: 'var(--surface-hover)', padding: '2rem', borderRadius: '50%' }}>
-              <MessageSquare size={56} />
+              <footer className="px-8 pb-8 pt-4 bg-transparent border-t border-white/5">
+                {partnerTyping && <div className="text-[10px] text-primary italic mb-3 ml-6 font-weight-bold animate-pulse">Neural partner manifested thoughts...</div>}
+                <form onSubmit={handleSend} className="bg-bg-glass-heavy/60 backdrop-blur-3xl rounded-full p-2 flex items-center gap-1 border border-white/10 shadow-3xl hover:border-white/20 transition-all focus-within:border-primary/40">
+                  <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+                  <Button variant="glass" size="icon" onClick={() => fileInputRef.current.click()} className="!rounded-full !w-10 !h-10 text-muted hover:text-primary transition-all"><ImageIcon size={18} /></Button>
+                  <Button variant={isRecording ? 'danger' : 'glass'} size="icon" onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording} className={`!rounded-full !w-10 !h-10 ${isRecording ? 'animate-pulse' : 'text-muted'}`}>{isRecording ? <Square size={14} fill="currentColor" /> : <Mic size={18} />}</Button>
+                  <input value={inputText} onChange={e => { setInputText(e.target.value); handleTyping(); }} placeholder={`Secure transmission to ${activeChat.name}...`} className="flex-1 bg-transparent border-none py-2 px-3 text-sm focus:outline-none placeholder:text-muted/40 font-weight-bold tracking-wide" />
+                  <Button type="submit" variant="primary" size="icon" className="!rounded-full !w-11 !h-11 shadow-glow active:scale-95 transition-transform" disabled={!inputText.trim()}><Send size={18} className="ml-1" /></Button>
+                </form>
+              </footer>
             </div>
-            <div>
-              <h2 style={{ color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Live Sync Chat</h2>
-              <p>Select someone from the list to start a real-time encrypted conversation.</p>
+          ) : (
+            <div className="flex-1 flex-center flex-col gap-6 text-center animate-in zoom-in duration-700">
+               <div className="w-32 h-32 rounded-full bg-primary/5 flex-center border border-primary/20 shadow-glow"><MessageSquare size={48} className="text-primary/60" /></div>
+               <div className="max-w-[240px]"><h2 className="text-2xl font-weight-bold text-white mb-2 tracking-tight">Connect Ultra</h2><p className="text-xs text-muted leading-relaxed font-weight-bold uppercase tracking-widest opacity-60">Establish a secure sync link for zero-latency communication.</p></div>
             </div>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import Peer from 'peerjs';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneCall, Video, MicOff, VideoOff, PhoneMissed, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { usePeer, getPeerId } from '../context/PeerContext';
-import { dataService } from '../services/mockDataService';
-import './components.css';
+import { usePeer } from '../context/PeerContext';
+import { getPeerRegistry } from '../services/firebaseDataService';
+import { Button } from './ui/Primitives';
 
 export function CallOverlay() {
   const { user } = useAuth();
@@ -39,10 +39,10 @@ export function CallOverlay() {
       const canvas = document.createElement('canvas');
       canvas.width = 640; canvas.height = 480;
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#2b302c';
+      ctx.fillStyle = '#0a0a0c';
       ctx.fillRect(0, 0, 640, 480);
-      ctx.fillStyle = '#babbac';
-      ctx.font = '24px sans-serif';
+      ctx.fillStyle = '#6366f1';
+      ctx.font = '24px Inter';
       ctx.textAlign = 'center';
       ctx.fillText('Camera Blocked / Not Found', 320, 240);
       const stream = canvas.captureStream(15);
@@ -51,7 +51,9 @@ export function CallOverlay() {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const dest = audioCtx.createMediaStreamDestination();
         stream.addTrack(dest.stream.getAudioTracks()[0]);
-      } catch(e) {}
+      } catch (e) {
+        console.warn('Failed to add mock audio track:', e);
+      }
       
       return stream;
     }
@@ -72,6 +74,20 @@ export function CallOverlay() {
     const s = seconds % 60;
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
+
+  const endCall = useCallback((triggerClose = true) => {
+     if (triggerClose && activeCall) activeCall.close();
+     if (triggerClose && incomingCall) incomingCall.close();
+     if (localStream) localStream.getTracks().forEach(track => track.stop());
+     setActiveCall(null);
+     setIsCalling(false);
+     setLocalStream(null);
+     setRemoteStream(null);
+     setIncomingCall(null);
+     setCallTime(0);
+     setIsMicMuted(false);
+     setIsCameraOff(false);
+  }, [activeCall, localStream, incomingCall]);
 
   const toggleMic = () => {
     if (localStream) {
@@ -100,13 +116,19 @@ export function CallOverlay() {
       setIsVideo(call.metadata?.isVideo ?? true);
       setIsCameraOff(!(call.metadata?.isVideo ?? true));
       setIncomingCall(call);
+
+      // Handle caller hanging up while ringing (CRITICAL BUG FIX)
+      call.on('close', () => {
+        setIncomingCall(null);
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+      });
     };
 
     peer.on('call', handleIncoming);
     return () => {
       peer.off('call', handleIncoming);
     };
-  }, [peer]);
+  }, [peer, localStream]);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -129,19 +151,23 @@ export function CallOverlay() {
        setIsCameraOff(!reqVideo);
        
        if (peerStatus !== 'ready' || !peer) {
-          alert("Real-time signaling is still initializing. Please wait 2-3 seconds.");
+          console.warn("Signaling still initializing. Blocking call request.");
           setIsCalling(false);
           return;
        }
 
        try {
+         const peerId = await getPeerRegistry(target.id || target.uid || target.email);
+         if (!peerId) {
+           alert("User is offline. Signaling ID not found.");
+           setIsCalling(false);
+           return;
+         }
+
          const stream = await getSafeStream(reqVideo);
          setLocalStream(stream);
          
-         const identity = target.id || target.email;
-         const targetId = dataService.getPeerIdFromRegistry(identity) || getPeerId(identity);
-         console.log(`Initiating P2P Call to Registry ID: ${targetId}`);
-         const call = peer.call(targetId, stream, { metadata: { isVideo: reqVideo } });
+         const call = peer.call(peerId, stream, { metadata: { isVideo: reqVideo, callerName: user.name, callerId: user.uid, callerAvatar: user.avatar } });
          
          call.on('stream', (userVideoStream) => {
             setIsCalling(false);
@@ -163,7 +189,7 @@ export function CallOverlay() {
 
     window.addEventListener('initiate_call', handleInitiateCall);
     return () => window.removeEventListener('initiate_call', handleInitiateCall);
-  }, [peer, peerStatus]);
+  }, [peer, peerStatus, user, endCall]);
 
   const answerCall = async () => {
     if (!incomingCall) return;
@@ -176,13 +202,11 @@ export function CallOverlay() {
           setRemoteStream(userVideoStream);
        });
 
-       incomingCall.on('close', () => {
-          endCall(false);
-       });
-
        setActiveCall(incomingCall);
        setIncomingCall(null);
+       setCallTarget({ name: incomingCall.metadata?.callerName || 'Unknown', avatar: incomingCall.metadata?.callerAvatar });
     } catch (err) {
+       console.error('Answer call failed:', err);
        alert("Could not physically access camera devices to answer P2P stream.");
        setIncomingCall(null);
     }
@@ -195,108 +219,126 @@ export function CallOverlay() {
      }
   };
 
-  const endCall = (triggerClose = true) => {
-     if (triggerClose && activeCall) activeCall.close();
-     if (localStream) localStream.getTracks().forEach(track => track.stop());
-     setActiveCall(null);
-     setIsCalling(false);
-     setLocalStream(null);
-     setRemoteStream(null);
-     setIncomingCall(null);
-     setCallTime(0);
-     setIsMicMuted(false);
-     setIsCameraOff(false);
-  };
-
   if (!incomingCall && !activeCall && !isCalling) return null;
 
   return (
-    <div className="modal-overlay" style={{zIndex: 9999, background: 'rgba(10, 15, 8, 0.95)', backdropFilter: 'blur(30px)'}}>
-       {incomingCall && (
-         <div className="glass" style={{padding: '3rem', textAlign: 'center', borderRadius: '40px', display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: '400px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'}}>
-            <div style={{position: 'relative', width: '120px', height: '120px', margin: '0 auto'}}>
-               <div style={{position: 'absolute', inset: 0, background: 'var(--accent-color)', borderRadius: '50%', opacity: 0.3, animation: 'heart-pop 2s infinite'}} />
-               <div style={{position: 'absolute', inset: '10px', background: 'var(--accent-color)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, boxShadow: '0 10px 20px rgba(118, 123, 111, 0.4)'}}>
-                  <Phone size={48} color="white" />
-               </div>
-            </div>
-            <div>
-               <h2 style={{color: 'white', fontSize: '2rem', marginBottom: '0.5rem', fontWeight: 800}}>Incoming Call</h2>
-               <p style={{color: 'var(--text-secondary)', fontSize: '1.1rem', letterSpacing: '0.5px'}}>@{incomingCall.peer.split('-')[1]}</p>
-            </div>
-            <div style={{display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1rem'}}>
-               <button onClick={rejectCall} className="action-btn" style={{background: '#ef4444', width: '70px', height: '70px', borderRadius: '50%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s', transform: 'scale(1)'}} onMouseEnter={e => e.currentTarget.style.transform='scale(1.1)'} onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}>
-                  <PhoneMissed size={32} />
-               </button>
-               <button onClick={answerCall} className="action-btn" style={{background: '#10b981', width: '70px', height: '70px', borderRadius: '50%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s', transform: 'scale(1)'}} onMouseEnter={e => e.currentTarget.style.transform='scale(1.1)'} onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}>
-                  <Phone size={32} />
-               </button>
-            </div>
-         </div>
-       )}
+    <AnimatePresence>
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9999] flex-center bg-black/80 backdrop-blur-3xl"
+      >
+         {incomingCall && (
+           <motion.div 
+             initial={{ scale: 0.9, y: 20 }}
+             animate={{ scale: 1, y: 0 }}
+             className="glass-heavy p-12 text-center rounded-[40px] flex flex-col gap-8 max-w-[400px] border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),_inset_0_1px_rgba(255,255,255,0.05)] w-full mx-4"
+           >
+              <div className="relative w-32 h-32 mx-auto">
+                 <div className="absolute inset-0 bg-primary rounded-full opacity-30 animate-ping" />
+                 <div className="absolute inset-2 bg-primary rounded-full flex-center z-10 shadow-glow">
+                    <Phone size={48} color="white" className="animate-pulse" />
+                 </div>
+              </div>
+              <div className="space-y-2">
+                 <h2 className="text-white text-3xl font-weight-black tracking-tight">{incomingCall.metadata?.callerName || 'Incoming Call'}</h2>
+                 <p className="text-primary font-weight-bold tracking-widest uppercase text-sm">Ultra-Sync Active</p>
+              </div>
+              <div className="flex gap-6 justify-center mt-4">
+                 <Button variant="danger" size="icon" onClick={rejectCall} className="w-16 h-16 rounded-full">
+                    <PhoneMissed size={28} />
+                 </Button>
+                 <Button onClick={answerCall} className="bg-green-500 hover:bg-green-400 text-white w-16 h-16 rounded-full shadow-[0_0_30px_rgba(34,197,94,0.4)]">
+                    <Phone size={28} />
+                 </Button>
+              </div>
+           </motion.div>
+         )}
 
-       {isCalling && !remoteStream && (
-         <div className="glass" style={{padding: '4rem', textAlign: 'center', borderRadius: '40px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)'}}>
-            <div className="avatar" style={{width: '100px', height: '100px', margin: '0 auto 2rem auto', backgroundImage: callTarget?.avatar ? `url(${callTarget.avatar})` : 'none', border: '3px solid var(--accent-color)', animation: 'pulse-ring 2s infinite'}} />
-            <h2 style={{fontSize: '1.75rem', color: 'white', fontWeight: 700}}>Calling {callTarget?.name}...</h2>
-            <p style={{color: 'var(--text-secondary)', marginTop: '1rem', fontStyle: 'italic'}}>Waiting for response from satellite registry...</p>
-            <div style={{display: 'flex', gap: '1.5rem', justifyContent: 'center', marginTop: '3rem'}}>
-              <button onClick={toggleMic} className="action-btn" style={{background: isMicMuted ? '#ef4444' : 'rgba(255,255,255,0.1)'}}>
-                 {isMicMuted ? <MicOff size={22} /> : <Phone size={22} />}
-              </button>
-              <button onClick={() => endCall(true)} className="btn-primary" style={{background: '#ef4444', padding: '1rem 2rem', borderRadius: '999px', fontWeight: 700}}>Hang Up</button>
-            </div>
-         </div>
-       )}
+         {isCalling && !remoteStream && (
+           <motion.div 
+             initial={{ scale: 0.9 }}
+             animate={{ scale: 1 }}
+             className="glass-heavy p-12 text-center rounded-[40px] max-w-[400px] border-white/10 w-full mx-4"
+           >
+              <div 
+                className="w-32 h-32 mx-auto mb-8 rounded-full border-4 border-primary shadow-glow relative"
+                style={{ backgroundImage: callTarget?.avatar ? `url(${callTarget.avatar})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}
+              >
+                 <div className="absolute -inset-4 border-2 border-primary/30 rounded-full animate-ping" />
+              </div>
+              <h2 className="text-2xl text-white font-weight-black tracking-tight mb-2">Connecting to {callTarget?.name}...</h2>
+              <p className="text-secondary font-style-italic mb-10">Establishing Zero-Trust Enclave...</p>
+              
+              <div className="flex justify-center gap-6">
+                <Button variant="glass" size="icon" onClick={toggleMic} className={`w-14 h-14 ${isMicMuted ? 'text-red-400 bg-red-500/10' : ''}`}>
+                   {isMicMuted ? <MicOff size={24} /> : <Phone size={24} />}
+                </Button>
+                <Button variant="danger" onClick={() => endCall(true)} className="px-8 rounded-full font-weight-bold">
+                   End Call
+                </Button>
+              </div>
+           </motion.div>
+         )}
 
-       {activeCall && remoteStream && (
-         <div style={{position: 'relative', width: '100%', height: '100%', overflow: 'hidden'}}>
-            {/* Main Remote View */}
-            <div style={{width: '100%', height: '100%', background: '#050a05', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-               {isVideo && !isCameraOff ? (
-                  <video ref={remoteVideoRef} autoPlay playsInline style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-               ) : (
-                  <div style={{textAlign: 'center'}}>
-                     <div className="avatar" style={{width: '150px', height: '150px', margin: '0 auto 2rem auto', backgroundImage: callTarget?.avatar ? `url(${callTarget.avatar})` : 'none', filter: 'grayscale(0.5)'}} />
-                     <h3 style={{color: 'white', fontSize: '1.5rem'}}>{callTarget?.name}</h3>
-                     <p style={{color: 'var(--text-secondary)'}}>Audio Only Session</p>
-                  </div>
-               )}
-            </div>
+         {activeCall && remoteStream && (
+           <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             className="relative w-full h-full bg-black overflow-hidden"
+           >
+              {/* Main Remote View */}
+              <div className="absolute inset-0 flex-center">
+                 {isVideo && !isCameraOff ? (
+                    <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                 ) : (
+                    <div className="text-center">
+                       <div className="w-40 h-40 mx-auto mb-6 rounded-full border border-white/10" style={{ backgroundImage: callTarget?.avatar ? `url(${callTarget.avatar})` : 'none', backgroundSize: 'cover', filter: 'grayscale(0.5)' }} />
+                       <h3 className="text-white text-3xl font-weight-bold tracking-tight mb-2">{callTarget?.name || 'Remote Peer'}</h3>
+                       <p className="text-accent tracking-widest uppercase text-sm font-weight-bold">Secure Voice Session</p>
+                    </div>
+                 )}
+              </div>
 
-            {/* PIP Local View */}
-            <div style={{position: 'absolute', top: '2rem', right: '2rem', width: '220px', height: '140px', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 15px 35px rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.1)'}}>
-               {isVideo && !isCameraOff ? (
-                  <video ref={localVideoRef} autoPlay muted playsInline style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-               ) : (
-                  <div style={{width: '100%', height: '100%', background: 'var(--surface-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)'}}>
-                    <VideoOff size={32} />
-                  </div>
-               )}
-            </div>
+              {/* PIP Local View */}
+              <motion.div 
+                drag
+                dragConstraints={{ top: 20, left: 20, right: 300, bottom: 300 }}
+                className="absolute top-8 right-8 w-48 h-72 rounded-[24px] overflow-hidden shadow-2xl border border-white/10 bg-surface-active cursor-move"
+              >
+                 {isVideo && !isCameraOff ? (
+                    <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover mirror" />
+                 ) : (
+                    <div className="w-full h-full flex-center text-secondary bg-black/40 backdrop-blur-md">
+                      <VideoOff size={40} />
+                    </div>
+                 )}
+              </motion.div>
 
-            {/* Floating Controls Overlay */}
-            <div style={{position: 'absolute', bottom: '4rem', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem'}}>
-               <div style={{color: 'white', background: 'rgba(0,0,0,0.5)', padding: '0.5rem 1.25rem', borderRadius: '999px', fontSize: '1.1rem', fontWeight: 700, backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)'}}>
-                  {formatTime(callTime)}
-               </div>
-               
-               <div style={{display: 'flex', gap: '1.5rem', background: 'rgba(10, 15, 8, 0.7)', padding: '1rem 2rem', borderRadius: '40px', backdropFilter: 'blur(25px)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)'}}>
-                  <button onClick={toggleMic} className="action-btn" style={{background: isMicMuted ? '#ef4444' : 'rgba(255,255,255,0.1)', color: 'white', borderRadius: '50%', width: '60px', height: '60px'}}>
-                     {isMicMuted ? <MicOff size={24} /> : <Phone size={24} />}
-                  </button>
-                  {isVideo && (
-                    <button onClick={toggleCamera} className="action-btn" style={{background: isCameraOff ? '#ef4444' : 'rgba(255,255,255,0.1)', color: 'white', borderRadius: '50%', width: '60px', height: '60px'}}>
-                       {isCameraOff ? <VideoOff size={24} /> : <Video size={24} />}
-                    </button>
-                  )}
-                  <button onClick={() => endCall(true)} className="action-btn" style={{background: '#ef4444', color: 'white', borderRadius: '50%', width: '60px', height: '60px', transform: 'scale(1.1)'}}>
-                     <PhoneMissed size={24} />
-                  </button>
-               </div>
-            </div>
-         </div>
-       )}
-    </div>
+              {/* Floating Controls Overlay */}
+              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-6">
+                 <div className="text-white bg-black/60 px-6 py-2 rounded-full text-lg font-weight-black tracking-widest backdrop-blur-md border border-white/10">
+                    {formatTime(callTime)}
+                 </div>
+                 
+                 <div className="flex gap-6 glass-heavy p-6 rounded-[40px] border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.8)]">
+                    <Button variant="glass" size="icon" onClick={toggleMic} className={`w-14 h-14 rounded-full ${isMicMuted ? 'bg-red-500/20 text-red-500 border-red-500/30' : 'hover:bg-white/10'}`}>
+                       {isMicMuted ? <MicOff size={24} /> : <Phone size={24} />}
+                    </Button>
+                    {isVideo && (
+                      <Button variant="glass" size="icon" onClick={toggleCamera} className={`w-14 h-14 rounded-full ${isCameraOff ? 'bg-red-500/20 text-red-500 border-red-500/30' : 'hover:bg-white/10'}`}>
+                         {isCameraOff ? <VideoOff size={24} /> : <Video size={24} />}
+                      </Button>
+                    )}
+                    <Button variant="danger" size="icon" onClick={() => endCall(true)} className="w-14 h-14 rounded-full">
+                       <PhoneMissed size={24} />
+                    </Button>
+                 </div>
+              </div>
+           </motion.div>
+         )}
+      </motion.div>
+    </AnimatePresence>
   );
 }

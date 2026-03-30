@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useContext, useEffect } from 'react';
 import {
   signInWithEmailAndPassword,
@@ -17,14 +18,25 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Fetch the full profile from Firestore
-        const profile = await getUserProfile(firebaseUser.uid);
-        setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...profile });
-      } else {
-        setUser(null);
+      try {
+        if (firebaseUser) {
+          // Fetch the full profile from Firestore
+          const profile = await getUserProfile(firebaseUser.uid);
+          setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...profile });
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        console.error("Critical Auth/Firestore initialization error:", err);
+        // Fallback user state so the app doesn't hang forever
+        if (firebaseUser) {
+          setUser({ uid: firebaseUser.uid, email: firebaseUser.email, name: 'User' });
+        } else {
+          setUser(null);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsubscribe;
   }, []);

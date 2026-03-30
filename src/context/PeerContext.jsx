@@ -1,92 +1,117 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useState, useContext, useEffect, useRef } from 'react';
 import Peer from 'peerjs';
 import { useAuth } from './AuthContext';
-import { dataService } from '../services/mockDataService';
+import { updatePeerRegistry } from '../services/firebaseDataService';
 
 const PeerContext = createContext(null);
-
-export const getPeerId = (idOrEmail) => {
-  if (!idOrEmail) return null;
-  return 'u-' + String(idOrEmail).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-};
 
 export const PeerProvider = ({ children }) => {
   const { user } = useAuth();
   const [peer, setPeer] = useState(null);
-  const [peerStatus, setPeerStatus] = useState('offline'); // offline, connecting, ready, error
+  const [peerStatus, setPeerStatus] = useState('offline');
+  const [errorType, setErrorType] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const peerInitRef = useRef(false);
+  const currentPeerRef = useRef(null);
 
   useEffect(() => {
-    if (!user) {
-      if (peer) {
-        peer.destroy();
-        setPeer(null);
-        setPeerStatus('offline');
+    let timeoutId;
+
+    if (!user?.uid) {
+      if (currentPeerRef.current) {
+        currentPeerRef.current.destroy();
+        currentPeerRef.current = null;
       }
+      setPeer(null);
+      setPeerStatus('offline');
+      peerInitRef.current = false;
       return;
     }
 
-    // Ensure ID starts with a letter and has no special chars that might break DNS-like routing
-    const baseId = getPeerId(user.id || user.email);
-    let timeoutId;
-    
-    const initPeer = (id) => {
+    if (peerInitRef.current) return;
+    peerInitRef.current = true;
+
+    const initPeer = () => {
       setPeerStatus('connecting');
-      console.log('Initiating WebRTC Signaling for: ' + id);
-      const newPeer = new Peer(id, {
-        debug: 3 // Enable detailed logging for debugging
+      setErrorType(null);
+      
+      /**
+       * ULTIMATE SIGNALING RESOLUTION:
+       * 1. Attempt connection via the prioritized PeerJS cloud host (0.peerjs.com).
+       * 2. Explicitly setting path: '/' to override any server-side path mismatches.
+       * 3. Randomized PeerID prefix ensures that even if a session hung, we can re-connect.
+       */
+      const newPeer = new Peer(undefined, {
+        host: '0.peerjs.com',
+        port: 443,
+        secure: true,
+        key: 'peerjs',
+        path: '/',
+        debug: 3,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
       });
 
-      // Connection Watchdog
+      currentPeerRef.current = newPeer;
+
       timeoutId = setTimeout(() => {
-        if (newPeer.disconnected || !newPeer.open) {
-           console.warn("Signaling timeout. Retrying with anonymous ID...");
-           newPeer.destroy();
-           setPeerStatus('error');
+        if (newPeer && !newPeer.open) {
+          console.warn("Signaling probe timed out. Resetting link.");
+          newPeer.destroy();
+          setPeerStatus('error');
+          setErrorType('TIMEOUT');
+          peerInitRef.current = false;
         }
-      }, 10000);
+      }, 15000);
 
       newPeer.on('open', (id) => {
-        console.log('WebRTC Peer ID Connected: ' + id);
+        console.log('Synchronized Link Active: ' + id);
         clearTimeout(timeoutId);
         setPeerStatus('ready');
         setPeer(newPeer);
-        
-        // Register this ID globally for discovery
-        const identity = user.id || user.email;
-        dataService.updatePeerRegistry(identity, id);
+        updatePeerRegistry(user.uid, id).catch(e => console.warn("Registry deferred.", e));
       });
 
       newPeer.on('error', (err) => {
-        console.error('PeerJS Global Error:', err);
+        console.error('PeerJS Global Failure:', err.type, err);
         clearTimeout(timeoutId);
-        if (err.type === 'unavailable-id') {
-           const retryId = `${id}-${Math.floor(Math.random() * 1000)}`;
-           console.warn(`ID Collision. Retrying as ${retryId}`);
-           newPeer.destroy();
-           initPeer(retryId);
-        } else {
-           setPeerStatus('error');
-        }
+        setPeerStatus('error');
+        setErrorType(err.type ? err.type.toUpperCase() : 'SERVER-ERROR');
+        peerInitRef.current = false; 
       });
 
       newPeer.on('disconnected', () => {
-        console.log('Peer disconnected. Attempting reconnect...');
+        console.log('Signaling severed. Monitoring for recovery...');
         newPeer.reconnect();
       });
-      
+
       return newPeer;
     };
 
-    const p = initPeer(baseId);
+    initPeer();
 
     return () => {
       clearTimeout(timeoutId);
-      p.destroy();
+      if (currentPeerRef.current) {
+        currentPeerRef.current.destroy();
+        currentPeerRef.current = null;
+      }
+      peerInitRef.current = false;
     };
-  }, [user]);
+  }, [user?.uid, retryCount]);
+
+  const manualRetry = () => {
+    peerInitRef.current = false;
+    setRetryCount(prev => prev + 1);
+  };
 
   return (
-    <PeerContext.Provider value={{ peer, peerStatus }}>
+    <PeerContext.Provider value={{ peer, peerStatus, manualRetry, errorType }}>
       {children}
     </PeerContext.Provider>
   );

@@ -1,37 +1,53 @@
-// Compress and resize image file to a Base64 string safe for localStorage
-export const processImage = (file, maxWidth = 800) => {
+// Advanced image processing utility for Connect Premium
+// Handles compression, resizing, and CSS-style filter application via Canvas
+
+export const processImage = (input, maxWidth = 1200, filterId = 'none') => {
   return new Promise((resolve, reject) => {
-    if (!file) {
-      resolve(null);
-      return;
-    }
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target.result;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
+    if (!input) return resolve(null);
 
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = input;
 
-        canvas.width = width;
-        canvas.height = height;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
 
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
+      // Maintain aspect ratio
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
 
-        // Convert to highly compressed JPEG to save strict localStorage quotas
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-        resolve(dataUrl);
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      // Apply Filter via Canvas context
+      const filterStyles = {
+        none: 'none',
+        grayscale: 'grayscale(100%)',
+        sepia: 'sepia(80%)',
+        vibrant: 'saturate(180%) contrast(110%)',
+        warm: 'sepia(30%) saturate(140%) hue-rotate(-10deg)',
+        cool: 'saturate(120%) hue-rotate(180deg) brightness(1.1)'
       };
-      img.onerror = (error) => reject(error);
+
+      if (filterId !== 'none' && filterStyles[filterId]) {
+        ctx.filter = filterStyles[filterId];
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Convert to efficient JPEG
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      resolve(dataUrl);
     };
-    reader.onerror = (error) => reject(error);
+
+    img.onerror = (error) => {
+      console.error("Image processing failed:", error);
+      reject(error);
+    };
   });
 };

@@ -1,0 +1,113 @@
+:root {
+  /* ─── COLOR PALETTE (HSL/RGB) ─────────────────────────────── */
+  --primary: #6366f1; /* Electric Indigo */
+  --primary-glow: rgba(99, 102, 241, 0.4);
+  
+  --accent: #00f0ff; /* Cyberpunk Cyan */
+  --accent-glow: rgba(0, 240, 255, 0.4);
+
+  /* Semantic Modern Midnight Palette */
+  --bg-darker: #050505;
+  --bg-main: #0a0a0c;
+  --bg-surface: #101014;
+  --bg-glass: rgba(15, 15, 20, 0.65);
+  --bg-glass-heavy: rgba(8, 8, 12, 0.85);
+  
+  --text-main: #ffffff;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.2);
+
+  /* Elevation (Depth) */
+  --elevation-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --elevation-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --elevation-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  --elevation-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+
+  /* Smooth Glass */
+  --glass-blur: blur(24px) saturate(180%);
+  --glass-blur-heavy: blur(60px) saturate(200%);
+
+  /* Spacing Boundaries */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-full: 9999px;
+  
+  --space-unit: 1rem;
+  --space-xs: calc(var(--space-unit) * 0.25);
+  --space-sm: calc(var(--space-unit) * 0.5);
+  --space-md: var(--space-unit);
+  --space-lg: calc(var(--space-unit) * 1.5);
+  --space-xl: calc(var(--space-unit) * 2);
+  --space-2xl: calc(var(--space-unit) * 3);
+
+  /* Typography */
+  --weight-normal: 400;
+  --weight-semi: 600;
+  --weight-bold: 700;
+  --weight-black: 900;
+}
+
+/* ─── FORCE DARK ─────────────────────────────────────────── */
+html, body {
+  background-color: var(--bg-darker) !important;
+  color: var(--text-main) !important;
+}
+
+/* ─── UTILITIES ──────────────────────────────────────────── */
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-glass);
+}
+.glass-heavy {
+  background: var(--bg-glass-heavy);
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
+  border: 1px solid var(--border-glass);
+}
+
+.elevation-premium { box-shadow: var(--elevation-lg), 0 0 0 1px var(--border-glass); }
+
+.text-main     { color: var(--text-main) !important; }
+.text-secondary { color: var(--text-secondary) !important; }
+.text-muted    { color: var(--text-muted) !important; }
+.text-primary  { color: var(--primary) !important; text-shadow: 0 0 10px rgba(99, 102, 241, 0.3); }
+.text-accent   { color: var(--accent) !important; text-shadow: 0 0 10px rgba(0, 240, 255, 0.3); }
+.text-gradient {
+  background: linear-gradient(135deg, #00f0ff, #6366f1);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ─── LAYOUTS ────────────────────────────────────────────── */
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-1 { flex: 1; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ─── ROUNDING ───────────────────────────────────────────── */
+.rounded-radius-md { border-radius: var(--radius-md); }
+.rounded-radius-lg { border-radius: var(--radius-lg); }
+.rounded-full { border-radius: var(--radius-full); }
+
+/* ─── GLOWS ─────────────────────────────────────────────── */
+.glow-primary { box-shadow: 0 0 25px var(--primary-glow); }
+.glow-accent { box-shadow: 0 0 25px var(--accent-glow); }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── FALLBACK ALIASES ────────────────────────────────────── */
+:root {
+  --surface-active: rgba(0, 240, 255, 0.1);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --border-main: var(--border-glass);
+  --primary-rgb: 99, 102, 241;
+}
